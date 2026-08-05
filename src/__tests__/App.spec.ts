@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import App from '../App.vue'
 import { i18n } from '../i18n'

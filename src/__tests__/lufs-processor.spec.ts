@@ -260,6 +260,19 @@ describe('lufs-processor AudioWorklet', () => {
     expect(msg.type).toBe('lufs')
   })
 
+  it('does not allocate temporary arrays through filter during real-time processing', async () => {
+    const { ctor } = await loadProcessorCtor()
+    const proc = new ctor()
+    const { left, right } = makeFrames(1000, true)
+    const outputs = [[new Float32Array(1000), new Float32Array(1000)]]
+    const filterSpy = vi.spyOn(Array.prototype, 'filter')
+
+    proc.process([[left, right]], outputs)
+
+    expect(filterSpy).not.toHaveBeenCalled()
+    filterSpy.mockRestore()
+  })
+
   it('falls back to mono when right channel is missing and still posts LUFS', async () => {
     const { ctor, postedMessages } = await loadProcessorCtor()
     const proc = new ctor()

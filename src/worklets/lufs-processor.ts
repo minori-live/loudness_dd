@@ -265,33 +265,51 @@ class LufsProcessor extends AudioWorkletProcessor {
 
   private getShortTerm(): number {
     if (this.shortTermBlocks.length === 0) return -Infinity
-    const valid = this.shortTermBlocks.filter((l) => l > ABSOLUTE_THRESHOLD)
-    if (valid.length === 0) return -Infinity
+
+    let validCount = 0
     let sumPower = 0
-    for (const v of valid) {
-      sumPower += Math.pow(10, v / 10)
+    for (let i = 0; i < this.shortTermBlocks.length; i++) {
+      const blockLufs = this.shortTermBlocks[i] ?? -Infinity
+      if (blockLufs > ABSOLUTE_THRESHOLD) {
+        sumPower += Math.pow(10, blockLufs / 10)
+        validCount++
+      }
     }
-    const meanPower = sumPower / valid.length
+
+    if (validCount === 0) return -Infinity
+    const meanPower = sumPower / validCount
     return 10 * Math.log10(meanPower)
   }
 
   private getIntegrated(): number {
     if (this.blockLoudnesses.length === 0) return -Infinity
-    const aboveAbsolute = this.blockLoudnesses.filter((l) => l > ABSOLUTE_THRESHOLD)
-    if (aboveAbsolute.length === 0) return -Infinity
+
+    let absoluteCount = 0
     let sumPower1 = 0
-    for (const v of aboveAbsolute) {
-      sumPower1 += Math.pow(10, v / 10)
+    for (let i = 0; i < this.blockLoudnesses.length; i++) {
+      const blockLufs = this.blockLoudnesses[i] ?? -Infinity
+      if (blockLufs > ABSOLUTE_THRESHOLD) {
+        sumPower1 += Math.pow(10, blockLufs / 10)
+        absoluteCount++
+      }
     }
-    const firstMeanPower = sumPower1 / aboveAbsolute.length
+
+    if (absoluteCount === 0) return -Infinity
+    const firstMeanPower = sumPower1 / absoluteCount
     const relativeThreshold = 10 * Math.log10(firstMeanPower) + RELATIVE_THRESHOLD_OFFSET
-    const aboveRelative = aboveAbsolute.filter((l) => l > relativeThreshold)
-    if (aboveRelative.length === 0) return -Infinity
+
+    let relativeCount = 0
     let sumPower2 = 0
-    for (const v of aboveRelative) {
-      sumPower2 += Math.pow(10, v / 10)
+    for (let i = 0; i < this.blockLoudnesses.length; i++) {
+      const blockLufs = this.blockLoudnesses[i] ?? -Infinity
+      if (blockLufs > relativeThreshold) {
+        sumPower2 += Math.pow(10, blockLufs / 10)
+        relativeCount++
+      }
     }
-    const finalMeanPower = sumPower2 / aboveRelative.length
+
+    if (relativeCount === 0) return -Infinity
+    const finalMeanPower = sumPower2 / relativeCount
     return 10 * Math.log10(finalMeanPower)
   }
 

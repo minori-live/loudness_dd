@@ -131,10 +131,7 @@ const hasSolo = computed(() => tabsStore.hasSolo)
         </div>
 
         <div class="collapsible-content">
-          <div
-            class="meter-wrapper"
-            @click="isCollapsed(tab.tabId) && toggleCollapsed(tab.tabId)"
-          >
+          <div class="meter-wrapper" @click="isCollapsed(tab.tabId) && toggleCollapsed(tab.tabId)">
             <LufsMeter
               :momentary="tab.currentLufs.momentary"
               :short-term="tab.currentLufs.shortTerm"
@@ -162,7 +159,9 @@ const hasSolo = computed(() => tabsStore.hasSolo)
                 :value="tab.gainDb"
                 @input="handleGainChange(tab, $event)"
               />
-              <span v-if="!isCollapsed(tab.tabId)" class="slider-max">{{ formatGain(tab.maxGainDb) }}</span>
+              <span v-if="!isCollapsed(tab.tabId)" class="slider-max">{{
+                formatGain(tab.maxGainDb)
+              }}</span>
             </div>
             <div v-if="!isCollapsed(tab.tabId)" class="max-gain-control">
               <label class="max-gain-label">

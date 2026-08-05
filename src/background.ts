@@ -9,6 +9,8 @@ const MIN_BLOCKS_FOR_RELIABLE_LUFS = 10
 // Default gain limits
 const DEFAULT_MIN_GAIN = -60
 const DEFAULT_MAX_GAIN = 0
+const GAIN_CHANGE_EPSILON_DB = 0.01
+const AUTO_BALANCE_INTERVAL_MS = 100
 
 interface TabCaptureState {
   tabId: number
@@ -58,7 +60,7 @@ let autoBalanceSettings: AutoBalanceSettings = {
   enabled: false,
   targetLufs: -14, // Default target for streaming content
 }
-let autoBalanceInterval: ReturnType<typeof setInterval> | null = null
+let autoBalanceTimer: ReturnType<typeof setTimeout> | null = null
 
 // Limiter settings (global)
 let limiterSettings: LimiterSettings = {
@@ -382,6 +384,7 @@ async function stopTabCapture(tabId: number): Promise<{ success: boolean; error?
 async function setTabGain(
   tabId: number,
   gainDb: number,
+  persist = true,
 ): Promise<{ success: boolean; error?: string }> {
   const tabState = capturedTabs.get(tabId)
   if (!tabState) {
@@ -390,6 +393,12 @@ async function setTabGain(
 
   // Clamp gain to per-tab limits
   gainDb = Math.max(DEFAULT_MIN_GAIN, Math.min(tabState.maxGainDb, gainDb))
+
+  // Avoid redundant cross-context messages and storage writes for effectively
+  // unchanged gains. Integrated LUFS can fluctuate by tiny floating-point amounts.
+  if (Math.abs(tabState.gainDb - gainDb) < GAIN_CHANGE_EPSILON_DB) {
+    return { success: true }
+  }
 
   try {
     await sendToOffscreen({
@@ -404,7 +413,9 @@ async function setTabGain(
   }
 
   tabState.gainDb = gainDb
-  await saveState()
+  if (persist) {
+    await saveState()
+  }
 
   return { success: true }
 }
@@ -427,7 +438,7 @@ async function setTabMaxGain(
 
   // If current gain exceeds new max, adjust it
   if (tabState.gainDb > maxGainDb) {
-    await setTabGain(tabId, maxGainDb)
+    await setTabGain(tabId, maxGainDb, false)
   }
 
   await saveState()
@@ -509,7 +520,7 @@ async function autoBalanceOnce(targetLufs: number): Promise<void> {
     if (!tabState.isCapturing) continue
 
     if (getSoloTabId() !== null && getSoloTabId() !== tabId) {
-      setTabGain(tabId, -100)
+      await setTabGain(tabId, -100, false)
       continue
     }
 
@@ -528,7 +539,35 @@ async function autoBalanceOnce(targetLufs: number): Promise<void> {
     const requiredGain = targetLufs - currentLufs
 
     // Apply gain (with limits)
-    await setTabGain(tabId, requiredGain)
+    await setTabGain(tabId, requiredGain, false)
+  }
+}
+
+/**
+ * Run one serialized continuous auto-balance cycle, then schedule the next.
+ * Scheduling after completion prevents slow Chrome API/storage operations from
+ * accumulating overlapping async callbacks.
+ */
+async function runContinuousAutoBalance(): Promise<void> {
+  if (!autoBalanceSettings.enabled) {
+    autoBalanceTimer = null
+    return
+  }
+
+  try {
+    if (capturedTabs.size > 0) {
+      await autoBalanceOnce(autoBalanceSettings.targetLufs)
+    }
+  } catch (error) {
+    console.error('Continuous auto-balance cycle failed:', error)
+  }
+
+  if (autoBalanceSettings.enabled) {
+    autoBalanceTimer = setTimeout(() => {
+      void runContinuousAutoBalance()
+    }, AUTO_BALANCE_INTERVAL_MS)
+  } else {
+    autoBalanceTimer = null
   }
 }
 
@@ -536,26 +575,22 @@ async function autoBalanceOnce(targetLufs: number): Promise<void> {
  * Start continuous auto-balance in the background
  */
 function startContinuousAutoBalance(): void {
-  if (autoBalanceInterval) return // Already running
+  if (autoBalanceTimer !== null) return // Already running or scheduled
 
   console.log('Starting continuous auto-balance')
 
-  // Run auto-balance every 500ms
-  autoBalanceInterval = setInterval(async () => {
-    if (!autoBalanceSettings.enabled) return
-    if (capturedTabs.size === 0) return
-
-    await autoBalanceOnce(autoBalanceSettings.targetLufs)
-  }, 100)
+  autoBalanceTimer = setTimeout(() => {
+    void runContinuousAutoBalance()
+  }, AUTO_BALANCE_INTERVAL_MS)
 }
 
 /**
  * Stop continuous auto-balance
  */
 function stopContinuousAutoBalance(): void {
-  if (autoBalanceInterval) {
-    clearInterval(autoBalanceInterval)
-    autoBalanceInterval = null
+  if (autoBalanceTimer !== null) {
+    clearTimeout(autoBalanceTimer)
+    autoBalanceTimer = null
     console.log('Stopped continuous auto-balance')
   }
 }

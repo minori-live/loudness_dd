@@ -8,8 +8,8 @@ import { defineConfig } from 'vite'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import zipPack from 'vite-plugin-zip-pack'
 
-import manifest from './manifest.config'
-import i18nLocalesPlugin from './plugins/i18n-locales'
+import manifest from './manifest.config.ts'
+import i18nLocalesPlugin from './plugins/i18n-locales.ts'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -17,7 +17,7 @@ export default defineConfig({
     vue(),
     vueDevTools(),
     VueI18nPlugin({
-      include: resolve(__dirname, 'src/locales/**'),
+      include: resolve(import.meta.dirname, 'src/locales/**'),
       strictMessage: false,
     }),
     i18nLocalesPlugin(),
@@ -38,14 +38,14 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        offscreen: resolve(__dirname, 'offscreen.html'),
+        offscreen: resolve(import.meta.dirname, 'offscreen.html'),
       },
     },
   },
   server: {
     port: 5173,
     strictPort: true,
-    hmr: {
+    ws: {
       port: 5173,
     },
     cors: {
