@@ -17,6 +17,11 @@ export interface SessionTabState {
   maxGainDb: number
 }
 
+export interface GainUpdate {
+  gainDb: number
+  changed: boolean
+}
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value))
 }
@@ -139,11 +144,14 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
     return this.#focusTabId !== null && this.#focusTabId !== tabId ? FOCUS_ATTENUATION_DB : 0
   }
 
-  autoBalance(tabId: number, targetLufs: number): number | undefined {
+  autoBalance(tabId: number, targetLufs: number): GainUpdate | undefined {
     const tab = this.#tabs.get(tabId)
     if (!tab || tab.currentLufs.blockCount < MIN_BLOCKS_FOR_RELIABLE_LUFS) return undefined
     if (!Number.isFinite(tab.currentLufs.integrated)) return undefined
-    return this.setGain(tabId, targetLufs - tab.currentLufs.integrated)
+    const previousGain = tab.gainDb
+    const gainDb = this.setGain(tabId, targetLufs - tab.currentLufs.integrated)
+    if (gainDb === undefined) return undefined
+    return { gainDb, changed: gainDb !== previousGain }
   }
 
   snapshot(): SessionSnapshot {

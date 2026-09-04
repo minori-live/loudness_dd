@@ -4,7 +4,7 @@ export const SESSION_PORT_NAME = 'loudness-session' as const
 export const MIN_BLOCKS_FOR_RELIABLE_LUFS = 10
 export const MIN_GAIN_DB = -60
 export const DEFAULT_MAX_GAIN_DB = 0
-export const GAIN_CHANGE_EPSILON_DB = 0.01
+export const GAIN_CHANGE_EPSILON_DB = 0.1
 export const FOCUS_ATTENUATION_DB = -12
 
 export interface TabLufs {

@@ -30,6 +30,7 @@ interface TabAudioProcessor extends SessionTabState {
   stream: MediaStream
   trackEndedHandler: () => void
   contextStateHandler: () => void
+  lastAutoGainUpdateTime: number
 }
 
 const session = new SessionState<TabAudioProcessor>()
@@ -37,6 +38,8 @@ const subscribers = new Set<chrome.runtime.Port>()
 const cleanupTasks = new Map<number, Promise<boolean>>()
 const pendingMeterUpdates = new Map<number, SessionMeterUpdate>()
 const METER_NOTIFICATION_INTERVAL_MS = 100
+const AUTO_GAIN_UPDATE_INTERVAL_SECONDS = 0.2
+const AUTO_GAIN_TIME_CONSTANT_SECONDS = 0.05
 let settings = createDefaultSettings()
 let lufsWasmModulePromise: Promise<WebAssembly.Module> | undefined
 let meterNotificationTimer: number | undefined
@@ -116,11 +119,17 @@ function applyLimiterSettings(node: DynamicsCompressorNode, limiter: LimiterSett
   node.release.setValueAtTime(0.25, time)
 }
 
-function applyEffectiveGain(processor: TabAudioProcessor): void {
+function applyEffectiveGain(processor: TabAudioProcessor, smooth = false): void {
   const gain = session.isMuted(processor.tabId)
     ? 0
     : dbToGain(processor.gainDb + session.gainOffsetDb(processor.tabId))
-  processor.gainNode.gain.setValueAtTime(gain, processor.audioContext.currentTime)
+  const time = processor.audioContext.currentTime
+  processor.gainNode.gain.cancelScheduledValues(time)
+  if (smooth) {
+    processor.gainNode.gain.setTargetAtTime(gain, time, AUTO_GAIN_TIME_CONSTANT_SECONDS)
+  } else {
+    processor.gainNode.gain.setValueAtTime(gain, time)
+  }
 }
 
 function applyAllGains(): void {
@@ -202,15 +211,18 @@ async function endCapture(tabId: number, reason: string): Promise<void> {
 
 function handleLufs(tabId: number, lufs: TabLufs): void {
   if (!session.updateLufs(tabId, lufs)) return
-  const gain = session.autoBalance(tabId, settings.autoBalance.targetLufs)
-  if (gain !== undefined) {
-    const processor = session.get(tabId)
-    if (processor) applyEffectiveGain(processor)
-  }
   const processor = session.get(tabId)
-  if (processor) {
-    queueMeterUpdate({ tabId, currentLufs: lufs, gainDb: processor.gainDb })
+  if (!processor) return
+
+  const time = processor.audioContext.currentTime
+  if (time - processor.lastAutoGainUpdateTime >= AUTO_GAIN_UPDATE_INTERVAL_SECONDS) {
+    const gain = session.autoBalance(tabId, settings.autoBalance.targetLufs)
+    if (gain) {
+      processor.lastAutoGainUpdateTime = time
+      if (gain.changed) applyEffectiveGain(processor, true)
+    }
   }
+  queueMeterUpdate({ tabId, currentLufs: lufs, gainDb: processor.gainDb })
 }
 
 async function startCapture(
@@ -289,6 +301,7 @@ async function startCapture(
       stream,
       trackEndedHandler,
       contextStateHandler,
+      lastAutoGainUpdateTime: 0,
     }
 
     session.add(processor)

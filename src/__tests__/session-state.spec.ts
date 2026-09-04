@@ -72,10 +72,12 @@ describe('SessionState', () => {
     expect(state.get(1)?.gainDb).toBe(0)
 
     state.updateLufs(1, { momentary: -20, shortTerm: -20, integrated: -20, blockCount: 10 })
-    expect(state.autoBalance(1, -14)).toBe(0)
+    expect(state.autoBalance(1, -14)).toEqual({ gainDb: 0, changed: false })
 
     state.setMaxGain(1, 10)
-    expect(state.autoBalance(1, -14)).toBe(6)
+    expect(state.autoBalance(1, -14)).toEqual({ gainDb: 6, changed: true })
+    state.updateLufs(1, { momentary: -20, shortTerm: -20, integrated: -20.05, blockCount: 11 })
+    expect(state.autoBalance(1, -14)).toEqual({ gainDb: 6, changed: false })
   })
 
   it('clears solo or focus when its target tab is removed', () => {
