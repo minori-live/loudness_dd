@@ -11,8 +11,8 @@ Audience: coding agents (Cursor/Copilot) and maintainers. This is a high-signal,
 - Full validation: `mise run check`
 - Lint/format/type-check: `mise run lint`, `mise run format`, `mise run type-check`
 
-The toolchain is locked in `mise.toml` and `mise.lock`: Node 24.18.0, pnpm 11.20.0,
-actionlint 1.7.12, and ShellCheck 0.11.0.
+The toolchain is locked in `mise.toml` and `mise.lock`: Node, pnpm, Rust with the
+`wasm32-unknown-unknown` target, actionlint, and ShellCheck.
 
 ## What this project does
 
@@ -32,9 +32,10 @@ Loudness DD is a Chrome MV3 extension that:
 - Offscreen Document: owns live capture state, runs the Web Audio graph, calculates LUFS, and
   applies auto-balance/solo locally.
   - Files: [offscreen.html](offscreen.html), [src/offscreen.ts](src/offscreen.ts)
-- Audio/LUFS engine: ITU-R BS.1770-4 implementation and helpers.
+- Audio/LUFS engine: ITU-R BS.1770-4 implementation with a Rust/WebAssembly real-time kernel.
   - File: [src/audio/lufs.ts](src/audio/lufs.ts)
   - Worklet: [src/worklets/lufs-processor.ts](src/worklets/lufs-processor.ts)
+  - Rust kernel: [crates/lufs-meter/src/lib.rs](crates/lufs-meter/src/lib.rs)
 - Popup UI: Vue 3 + Pinia app that sends commands through the background and subscribes to live
   offscreen snapshots through the `loudness-session` runtime port.
   - Entry/UI: [src/main.ts](src/main.ts), [src/App.vue](src/App.vue), [src/components/](src/components/)
@@ -129,6 +130,7 @@ CI and release:
 4. Audio changes:
    - Validate CPU/perf, clamp user-facing ranges (gain, thresholds, ratios).
    - Keep limiter defaults conservative (avoid audible pumping).
+   - Run `pnpm wasm:build` after Rust changes; generated WASM is intentionally not committed.
 5. Lifecycle:
    - Preserve cleanup paths (`CAPTURE_ENDED`, `tabCapture.onStatusChanged`, `onRemoved`).
    - Keep badge updates coherent with auto-balance and tab count.

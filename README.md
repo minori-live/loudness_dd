@@ -55,6 +55,7 @@
 - **TypeScript** for type safety
 - **Pinia** for state management
 - **Vite** + **CRXJS** for Chrome extension development
+- **Rust** + **WebAssembly** for the real-time LUFS analysis kernel
 - **Web Audio API** for real-time audio processing
 - **Chrome Extension Manifest V3**
 
@@ -97,6 +98,9 @@ mise run dev
 # Run unit tests
 mise run test
 
+# Rebuild the Rust WebAssembly module after editing crates/lufs-meter
+pnpm wasm:build
+
 # Run every CI check locally
 mise run check
 
@@ -133,7 +137,7 @@ Release containing the versioned extension zip.
 
 The extension implements the ITU-R BS.1770-5 algorithm:
 
-1. **K-weighting Filter**: Two-stage biquad filter (high-shelf + high-pass) that models human frequency perception
+1. **K-weighting Filter**: A Rust/WebAssembly two-stage biquad filter (high-shelf + high-pass) that models human frequency perception
 2. **Block Processing**: 400ms overlapping blocks with 75% overlap for smooth measurements
 3. **Gating**: Excludes quiet passages (-70 LUFS absolute threshold) and applies relative gating (-10 LU) for integrated loudness
 

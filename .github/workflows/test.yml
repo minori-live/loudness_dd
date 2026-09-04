@@ -28,5 +28,17 @@ jobs:
           github-token: >-
             ${{ github.event_name == 'pull_request' && '' || github.token }}
 
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path crates/lufs-meter/Cargo.toml -- --check
+
+      - name: Lint Rust
+        run: >-
+          cargo clippy
+          --manifest-path crates/lufs-meter/Cargo.toml
+          --all-targets
+          --locked
+          --
+          -D warnings
+
       - name: Run repository checks
         run: mise run check

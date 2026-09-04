@@ -9,17 +9,20 @@
     "pnpm": "11.25.0"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "pnpm wasm:build && vite",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
-    "test:unit": "vitest run",
-    "test:unit:watch": "vitest",
-    "build-only": "vite build",
+    "test:unit": "pnpm wasm:build && run-p test:unit:ts test:unit:rust",
+    "test:unit:ts": "vitest run",
+    "test:unit:rust": "cargo test --manifest-path crates/lufs-meter/Cargo.toml --locked",
+    "test:unit:watch": "pnpm wasm:build && vitest",
+    "build-only": "pnpm wasm:build && vite build",
+    "wasm:build": "node scripts/build-wasm.mjs",
     "type-check": "vue-tsc --build",
-    "lint": "eslint . --cache --max-warnings 0",
+    "lint": "eslint . --cache --max-warnings 0 && cargo clippy --manifest-path crates/lufs-meter/Cargo.toml --all-targets --locked -- -D warnings",
     "lint:fix": "eslint . --fix --cache --max-warnings 0",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format": "prettier --write . && cargo fmt --manifest-path crates/lufs-meter/Cargo.toml",
+    "format:check": "prettier --check . && cargo fmt --manifest-path crates/lufs-meter/Cargo.toml -- --check"
   },
   "dependencies": {
     "pinia": "^4.0.2",

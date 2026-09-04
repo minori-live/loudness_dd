@@ -17,6 +17,7 @@ import {
   type SessionPortMessage,
   type TabLufs,
 } from '@/protocol'
+import lufsWasmUrl from '@/wasm/lufs_meter.wasm?url'
 import lufsProcessorUrl from '@/worklets/lufs-processor?worker&url'
 
 interface TabAudioProcessor extends SessionTabState {
@@ -34,6 +35,21 @@ const session = new SessionState<TabAudioProcessor>()
 const subscribers = new Set<chrome.runtime.Port>()
 const cleanupTasks = new Map<number, Promise<boolean>>()
 let settings = createDefaultSettings()
+let lufsWasmModulePromise: Promise<WebAssembly.Module> | undefined
+
+function loadLufsWasmModule(): Promise<WebAssembly.Module> {
+  lufsWasmModulePromise ??= fetch(lufsWasmUrl)
+    .then((response) => {
+      if (!response.ok) throw new Error(`Unable to load LUFS WebAssembly (${response.status})`)
+      return response.arrayBuffer()
+    })
+    .then((bytes) => WebAssembly.compile(bytes))
+    .catch((error: unknown) => {
+      lufsWasmModulePromise = undefined
+      throw error
+    })
+  return lufsWasmModulePromise
+}
 
 function response(success: boolean, error?: string): OffscreenResponse {
   return { success, session: session.snapshot(), error }
@@ -208,11 +224,15 @@ async function startCapture(
     gainNode.connect(limiterNode)
     limiterNode.connect(audioContext.destination)
 
-    await audioContext.audioWorklet.addModule(lufsProcessorUrl)
+    const [lufsWasmModule] = await Promise.all([
+      loadLufsWasmModule(),
+      audioContext.audioWorklet.addModule(lufsProcessorUrl),
+    ])
     workletNode = new AudioWorkletNode(audioContext, 'lufs-processor', {
       numberOfInputs: 1,
       numberOfOutputs: 1,
       outputChannelCount: [2],
+      processorOptions: { wasmModule: lufsWasmModule },
     })
 
     const trackEndedHandler = () => void endCapture(tabId, 'Audio track ended')

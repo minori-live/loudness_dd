@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { LufsCalculator } from '@/audio/lufs'
@@ -161,10 +164,8 @@ describe('LUFS algorithm parity (worklet-style vs LufsCalculator)', () => {
   })
 })
 
-type LufsWorkletCtor = new () => {
-  bufferSize: number
-  buffer: Float32Array
-  bufferIndex: number
+type LufsWorkletCtor = new (options: { processorOptions: { wasmModule: WebAssembly.Module } }) => {
+  port: { onmessage: ((event: MessageEvent) => void) | null }
   process: (
     inputs: Array<Array<Float32Array | undefined>>,
     outputs: Array<Array<Float32Array>>,
@@ -202,15 +203,22 @@ function setupWorklet() {
   return { postedMessages }
 }
 
-async function loadProcessorCtor() {
+async function loadProcessorCtor(workletSampleRate = 8000) {
   vi.resetModules()
   const { postedMessages } = setupWorklet()
-  ;(globalThis as unknown as { sampleRate?: number }).sampleRate = 8000
+  ;(globalThis as unknown as { sampleRate?: number }).sampleRate = workletSampleRate
+  const wasmBytes = await readFile(resolve('src/wasm/lufs_meter.wasm'))
+  const wasmModule = await WebAssembly.compile(wasmBytes)
   await import('../../src/worklets/lufs-processor.ts')
   const g = globalThis as Record<string, unknown>
   const w = g.__Worklet as { name: string; ctor: LufsWorkletCtor } | undefined
   expect(w).toBeTruthy()
-  return { ctor: w!.ctor, name: w!.name as string, postedMessages }
+  return {
+    ctor: w!.ctor,
+    create: () => new w!.ctor({ processorOptions: { wasmModule } }),
+    name: w!.name as string,
+    postedMessages,
+  }
 }
 
 function makeFrames(length: number, stereo = true) {
@@ -219,8 +227,7 @@ function makeFrames(length: number, stereo = true) {
   return { left, right }
 }
 
-function makeSineFrames(length: number, stereo = true) {
-  const sampleRate = 8000
+function makeSineFrames(length: number, stereo = true, sampleRate = 8000) {
   const left = Float32Array.from(
     { length },
     (_, frame) => Math.sin((2 * Math.PI * 1000 * frame) / sampleRate) * 0.1,
@@ -245,8 +252,8 @@ describe('lufs-processor AudioWorklet', () => {
   })
 
   it('posts LUFS message after sufficient frames processed', async () => {
-    const { ctor, postedMessages } = await loadProcessorCtor()
-    const proc = new ctor()
+    const { create, postedMessages } = await loadProcessorCtor()
+    const proc = create()
 
     // 1000 frames at sampleRate=8000 exceeds updateIntervalSamples (~800)
     const { left, right } = makeFrames(1000, true)
@@ -264,8 +271,8 @@ describe('lufs-processor AudioWorklet', () => {
   })
 
   it('handles stereo input and emits LUFS without errors', async () => {
-    const { ctor, postedMessages } = await loadProcessorCtor()
-    const proc = new ctor()
+    const { create, postedMessages } = await loadProcessorCtor()
+    const proc = create()
     const { left, right } = makeFrames(1000, true)
     const outputs = [[new Float32Array(1000), new Float32Array(1000)]]
     proc.process([[left, right]], outputs)
@@ -275,8 +282,8 @@ describe('lufs-processor AudioWorklet', () => {
   })
 
   it('does not allocate temporary arrays through filter during real-time processing', async () => {
-    const { ctor } = await loadProcessorCtor()
-    const proc = new ctor()
+    const { create } = await loadProcessorCtor()
+    const proc = create()
     const { left, right } = makeFrames(1000, true)
     const outputs = [[new Float32Array(1000), new Float32Array(1000)]]
     const filterSpy = vi.spyOn(Array.prototype, 'filter')
@@ -288,8 +295,8 @@ describe('lufs-processor AudioWorklet', () => {
   })
 
   it('falls back to mono when right channel is missing and still posts LUFS', async () => {
-    const { ctor, postedMessages } = await loadProcessorCtor()
-    const proc = new ctor()
+    const { create, postedMessages } = await loadProcessorCtor()
+    const proc = create()
     const { left } = makeFrames(1000, false)
     const outputs = [[new Float32Array(1000), new Float32Array(1000)]]
     proc.process([[left]], outputs)
@@ -299,8 +306,8 @@ describe('lufs-processor AudioWorklet', () => {
   })
 
   it('does not count blocks below the absolute gate', async () => {
-    const { ctor, postedMessages } = await loadProcessorCtor()
-    const proc = new ctor()
+    const { create, postedMessages } = await loadProcessorCtor()
+    const proc = create()
     const silence = new Float32Array(4000)
 
     proc.process([[silence]], [[new Float32Array(4000), new Float32Array(4000)]])
@@ -309,8 +316,8 @@ describe('lufs-processor AudioWorklet', () => {
   })
 
   it('measures mono once instead of duplicating it as stereo', async () => {
-    const { ctor, postedMessages } = await loadProcessorCtor()
-    const monoProcessor = new ctor()
+    const { create, postedMessages } = await loadProcessorCtor()
+    const monoProcessor = create()
     const mono = makeSineFrames(4000, false)
     monoProcessor.process(
       [[mono.left]],
@@ -319,7 +326,7 @@ describe('lufs-processor AudioWorklet', () => {
     const monoMomentary = lastMessage(postedMessages)?.momentary ?? -Infinity
 
     postedMessages.length = 0
-    const stereoProcessor = new ctor()
+    const stereoProcessor = create()
     const stereo = makeSineFrames(4000, true)
     stereoProcessor.process(
       [[stereo.left, stereo.right]],
@@ -332,11 +339,8 @@ describe('lufs-processor AudioWorklet', () => {
   })
 
   it('outputs silence (zeros) to avoid double audio', async () => {
-    const { ctor } = await loadProcessorCtor()
-    const proc = new ctor()
-    proc.bufferSize = 4
-    proc.buffer = new Float32Array(proc.bufferSize * 2)
-    proc.bufferIndex = 0
+    const { create } = await loadProcessorCtor()
+    const proc = create()
 
     const left = Float32Array.from([0.1, -0.2, 0.3, -0.4])
     const right = Float32Array.from([0.5, -0.6, 0.7, -0.8])
@@ -351,10 +355,53 @@ describe('lufs-processor AudioWorklet', () => {
   })
 
   it('returns true and posts nothing when there is no input', async () => {
-    const { ctor, postedMessages } = await loadProcessorCtor()
-    const proc = new ctor()
+    const { create, postedMessages } = await loadProcessorCtor()
+    const proc = create()
     const keepAlive = proc.process([], [])
     expect(keepAlive).toBe(true)
     expect(postedMessages.length).toBe(0)
+  })
+
+  it.each([44100, 48000, 96000])(
+    'keeps the Rust result within 0.1 LU of the TypeScript reference at %i Hz',
+    async (sampleRate) => {
+      const { create, postedMessages } = await loadProcessorCtor(sampleRate)
+      const proc = create()
+      const frameCount = sampleRate * 5
+      const { left, right } = makeSineFrames(frameCount, true, sampleRate)
+      const interleaved = new Float32Array(frameCount * 2)
+      for (let frame = 0; frame < frameCount; frame++) {
+        interleaved[frame * 2] = left[frame] ?? 0
+        interleaved[frame * 2 + 1] = right?.[frame] ?? 0
+      }
+      const reference = new LufsCalculator({ sampleRate, channels: 2 })
+      reference.processInterleaved(interleaved)
+
+      proc.process([[left, right]], [[new Float32Array(frameCount), new Float32Array(frameCount)]])
+
+      const actual = lastMessage(postedMessages)?.integrated ?? -Infinity
+      expect(Math.abs(actual - reference.getIntegratedLoudness())).toBeLessThanOrEqual(0.1)
+    },
+  )
+
+  it('resets the Rust meter without rebuilding the worklet', async () => {
+    const { create, postedMessages } = await loadProcessorCtor()
+    const proc = create()
+    const sine = makeSineFrames(4000, true)
+    proc.process(
+      [[sine.left, sine.right]],
+      [[new Float32Array(sine.left.length), new Float32Array(sine.left.length)]],
+    )
+    const blockCountBeforeReset = lastMessage(postedMessages)?.blockCount ?? 0
+    expect(blockCountBeforeReset).toBeGreaterThan(0)
+
+    proc.port.onmessage?.({ data: { type: 'reset' } } as MessageEvent)
+    postedMessages.length = 0
+    proc.process(
+      [[sine.left, sine.right]],
+      [[new Float32Array(sine.left.length), new Float32Array(sine.left.length)]],
+    )
+
+    expect(lastMessage(postedMessages)?.blockCount).toBe(blockCountBeforeReset)
   })
 })
