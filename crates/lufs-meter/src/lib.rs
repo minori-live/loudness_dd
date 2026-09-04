@@ -6,8 +6,8 @@ const CHANNELS: usize = 2;
 const INPUT_CAPACITY: usize = 128;
 const SHORT_TERM_BLOCKS: usize = 30;
 const MAX_INTEGRATED_BLOCKS: usize = 600;
-const ABSOLUTE_THRESHOLD: f64 = -70.0;
-const RELATIVE_THRESHOLD_OFFSET: f64 = -10.0;
+const ABSOLUTE_THRESHOLD_POWER: f64 = 1.172_465_304_582_298_1e-7;
+const RELATIVE_THRESHOLD_POWER_RATIO: f64 = 0.1;
 
 #[derive(Clone, Copy)]
 struct BiquadCoefficients {
@@ -35,10 +35,13 @@ struct LufsMeter {
     samples_since_last_block: usize,
     samples_since_last_update: usize,
     samples_accumulated: usize,
-    block_loudnesses: [f64; MAX_INTEGRATED_BLOCKS],
+    block_powers: [f64; MAX_INTEGRATED_BLOCKS],
+    integrated_power_sum: f64,
     integrated_length: usize,
     integrated_index: usize,
-    short_term_blocks: [f64; SHORT_TERM_BLOCKS],
+    short_term_powers: [f64; SHORT_TERM_BLOCKS],
+    short_term_power_sum: f64,
+    short_term_gated_count: usize,
     short_term_length: usize,
     short_term_index: usize,
     block_count: u32,
@@ -76,10 +79,13 @@ impl LufsMeter {
             samples_since_last_block: 0,
             samples_since_last_update: 0,
             samples_accumulated: 0,
-            block_loudnesses: [f64::NEG_INFINITY; MAX_INTEGRATED_BLOCKS],
+            block_powers: [0.0; MAX_INTEGRATED_BLOCKS],
+            integrated_power_sum: 0.0,
             integrated_length: 0,
             integrated_index: 0,
-            short_term_blocks: [f64::NEG_INFINITY; SHORT_TERM_BLOCKS],
+            short_term_powers: [0.0; SHORT_TERM_BLOCKS],
+            short_term_power_sum: 0.0,
+            short_term_gated_count: 0,
             short_term_length: 0,
             short_term_index: 0,
             block_count: 0,
@@ -117,12 +123,12 @@ impl LufsMeter {
                 && self.samples_accumulated >= self.block_size_samples
             {
                 self.samples_since_last_block -= self.hop_size_samples;
-                let block_lufs = self.current_block_lufs();
-                if block_lufs > ABSOLUTE_THRESHOLD {
-                    self.push_integrated(block_lufs);
+                let block_power = self.current_block_power();
+                if block_power > ABSOLUTE_THRESHOLD_POWER {
+                    self.push_integrated(block_power);
                     self.block_count = self.block_count.saturating_add(1);
                 }
-                self.push_short_term(block_lufs);
+                self.push_short_term(block_power);
             }
 
             if self.samples_since_last_update >= self.update_interval_samples {
@@ -167,20 +173,34 @@ impl LufsMeter {
         self.ring_squares[ring_offset] = square as f32;
     }
 
-    fn current_block_lufs(&self) -> f64 {
-        let sum_weighted = self.sum_squares[..self.active_channels].iter().sum::<f64>()
-            / self.block_size_samples as f64;
-        power_to_lufs(sum_weighted)
+    fn current_block_power(&self) -> f64 {
+        self.sum_squares[..self.active_channels].iter().sum::<f64>()
+            / self.block_size_samples as f64
     }
 
-    fn push_integrated(&mut self, value: f64) {
-        self.block_loudnesses[self.integrated_index] = value;
+    fn push_integrated(&mut self, power: f64) {
+        if self.integrated_length == MAX_INTEGRATED_BLOCKS {
+            self.integrated_power_sum -= self.block_powers[self.integrated_index];
+        }
+        self.block_powers[self.integrated_index] = power;
+        self.integrated_power_sum += power;
         self.integrated_index = (self.integrated_index + 1) % MAX_INTEGRATED_BLOCKS;
         self.integrated_length = (self.integrated_length + 1).min(MAX_INTEGRATED_BLOCKS);
     }
 
-    fn push_short_term(&mut self, value: f64) {
-        self.short_term_blocks[self.short_term_index] = value;
+    fn push_short_term(&mut self, power: f64) {
+        if self.short_term_length == SHORT_TERM_BLOCKS {
+            let previous = self.short_term_powers[self.short_term_index];
+            if previous > ABSOLUTE_THRESHOLD_POWER {
+                self.short_term_power_sum -= previous;
+                self.short_term_gated_count -= 1;
+            }
+        }
+        self.short_term_powers[self.short_term_index] = power;
+        if power > ABSOLUTE_THRESHOLD_POWER {
+            self.short_term_power_sum += power;
+            self.short_term_gated_count += 1;
+        }
         self.short_term_index = (self.short_term_index + 1) % SHORT_TERM_BLOCKS;
         self.short_term_length = (self.short_term_length + 1).min(SHORT_TERM_BLOCKS);
     }
@@ -190,20 +210,37 @@ impl LufsMeter {
             return f64::NEG_INFINITY;
         }
         let latest = (self.short_term_index + SHORT_TERM_BLOCKS - 1) % SHORT_TERM_BLOCKS;
-        self.short_term_blocks[latest]
+        power_to_lufs(self.short_term_powers[latest])
     }
 
     fn short_term(&self) -> f64 {
-        gated_mean_loudness(&self.short_term_blocks[..self.short_term_length], None)
+        if self.short_term_gated_count == 0 {
+            return f64::NEG_INFINITY;
+        }
+        power_to_lufs(self.short_term_power_sum / self.short_term_gated_count as f64)
     }
 
     fn integrated(&self) -> f64 {
-        let blocks = &self.block_loudnesses[..self.integrated_length];
-        let absolute_loudness = gated_mean_loudness(blocks, Some(ABSOLUTE_THRESHOLD));
-        if !absolute_loudness.is_finite() {
+        if self.integrated_length == 0 {
             return f64::NEG_INFINITY;
         }
-        gated_mean_loudness(blocks, Some(absolute_loudness + RELATIVE_THRESHOLD_OFFSET))
+
+        let relative_threshold = self.integrated_power_sum / self.integrated_length as f64
+            * RELATIVE_THRESHOLD_POWER_RATIO;
+        let mut relative_power_sum = 0.0;
+        let mut relative_count = 0;
+        for &power in &self.block_powers[..self.integrated_length] {
+            if power > relative_threshold {
+                relative_power_sum += power;
+                relative_count += 1;
+            }
+        }
+
+        if relative_count == 0 {
+            f64::NEG_INFINITY
+        } else {
+            power_to_lufs(relative_power_sum / f64::from(relative_count))
+        }
     }
 
     fn reset(&mut self) {
@@ -221,10 +258,13 @@ impl LufsMeter {
         self.samples_since_last_block = 0;
         self.samples_since_last_update = 0;
         self.samples_accumulated = 0;
-        self.block_loudnesses.fill(f64::NEG_INFINITY);
+        self.block_powers.fill(0.0);
+        self.integrated_power_sum = 0.0;
         self.integrated_length = 0;
         self.integrated_index = 0;
-        self.short_term_blocks.fill(f64::NEG_INFINITY);
+        self.short_term_powers.fill(0.0);
+        self.short_term_power_sum = 0.0;
+        self.short_term_gated_count = 0;
         self.short_term_length = 0;
         self.short_term_index = 0;
         self.block_count = 0;
@@ -274,25 +314,6 @@ fn power_to_lufs(power: f64) -> f64 {
         f64::NEG_INFINITY
     } else {
         -0.691 + 10.0 * libm::log10(power)
-    }
-}
-
-fn gated_mean_loudness(blocks: &[f64], threshold: Option<f64>) -> f64 {
-    let threshold = threshold.unwrap_or(ABSOLUTE_THRESHOLD);
-    let mut sum_power = 0.0;
-    let mut count = 0;
-
-    for &block in blocks {
-        if block > threshold {
-            sum_power += libm::pow(10.0, block / 10.0);
-            count += 1;
-        }
-    }
-
-    if count == 0 {
-        f64::NEG_INFINITY
-    } else {
-        10.0 * libm::log10(sum_power / f64::from(count))
     }
 }
 
