@@ -40,8 +40,7 @@ function isSessionPortMessage(message: unknown): message is SessionPortMessage {
     message &&
     typeof message === 'object' &&
     'type' in message &&
-    message.type === 'SESSION_UPDATED' &&
-    'session' in message,
+    (message.type === 'SESSION_UPDATED' || message.type === 'SESSION_METERS_UPDATED'),
   )
 }
 
@@ -130,6 +129,20 @@ export const useTabsStore = defineStore('tabs', () => {
     focusTabId.value = session.focusTabId ?? null
   }
 
+  function applyMeterUpdates(
+    message: Extract<SessionPortMessage, { type: 'SESSION_METERS_UPDATED' }>,
+  ): void {
+    const updates = new Map(message.updates.map((update) => [update.tabId, update]))
+    let changed = false
+    const nextTabs = tabs.value.map((tab) => {
+      const update = updates.get(tab.tabId)
+      if (!update) return tab
+      changed = true
+      return { ...tab, currentLufs: update.currentLufs, gainDb: update.gainDb }
+    })
+    if (changed) tabs.value = nextTabs
+  }
+
   function applyState(state: ExtensionState): void {
     applySession(state)
     autoBalanceSettings.value = state.autoBalanceSettings
@@ -149,7 +162,12 @@ export const useTabsStore = defineStore('tabs', () => {
     const port = chrome.runtime.connect({ name: SESSION_PORT_NAME })
     sessionPort = port
     port.onMessage.addListener((message: unknown) => {
-      if (isSessionPortMessage(message)) applySession(message.session)
+      if (!isSessionPortMessage(message)) return
+      if (message.type === 'SESSION_UPDATED') {
+        applySession(message.session)
+      } else {
+        applyMeterUpdates(message)
+      }
     })
     port.onDisconnect.addListener(() => {
       if (sessionPort === port) sessionPort = null

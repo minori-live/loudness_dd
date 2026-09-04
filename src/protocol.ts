@@ -162,10 +162,21 @@ export interface OffscreenResponse {
   error?: string
 }
 
-export interface SessionPortMessage {
-  type: 'SESSION_UPDATED'
-  session: SessionSnapshot
+export interface SessionMeterUpdate {
+  tabId: number
+  currentLufs: TabLufs
+  gainDb: number
 }
+
+export type SessionPortMessage =
+  | {
+      type: 'SESSION_UPDATED'
+      session: SessionSnapshot
+    }
+  | {
+      type: 'SESSION_METERS_UPDATED'
+      updates: SessionMeterUpdate[]
+    }
 
 export interface CaptureEndedMessage {
   type: 'CAPTURE_ENDED'

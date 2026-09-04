@@ -96,6 +96,26 @@ describe('tabs store session sync', () => {
     })
     expect(store.tabs[0]?.currentLufs.integrated).toBe(-16)
 
+    const unchangedTab = capturedTab(2, -18)
+    messageListeners[0]?.({
+      type: 'SESSION_UPDATED',
+      session: { tabs: [store.tabs[0]!, unchangedTab], soloTabId: null, focusTabId: null },
+    })
+    const stableReference = store.tabs[1]
+    messageListeners[0]?.({
+      type: 'SESSION_METERS_UPDATED',
+      updates: [
+        {
+          tabId: 1,
+          currentLufs: { momentary: -12, shortTerm: -13, integrated: -14, blockCount: 20 },
+          gainDb: -2,
+        },
+      ],
+    })
+    expect(store.tabs[0]?.currentLufs.integrated).toBe(-14)
+    expect(store.tabs[0]?.gainDb).toBe(-2)
+    expect(store.tabs[1]).toBe(stableReference)
+
     store.stopSync()
     expect(disconnect).toHaveBeenCalledOnce()
   })

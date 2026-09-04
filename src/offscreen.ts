@@ -15,6 +15,7 @@ import {
   type OffscreenResponse,
   type PersistedSettings,
   type SessionPortMessage,
+  type SessionMeterUpdate,
   type TabLufs,
 } from '@/protocol'
 import lufsWasmUrl from '@/wasm/lufs_meter.wasm?url'
@@ -34,8 +35,11 @@ interface TabAudioProcessor extends SessionTabState {
 const session = new SessionState<TabAudioProcessor>()
 const subscribers = new Set<chrome.runtime.Port>()
 const cleanupTasks = new Map<number, Promise<boolean>>()
+const pendingMeterUpdates = new Map<number, SessionMeterUpdate>()
+const METER_NOTIFICATION_INTERVAL_MS = 100
 let settings = createDefaultSettings()
 let lufsWasmModulePromise: Promise<WebAssembly.Module> | undefined
+let meterNotificationTimer: number | undefined
 
 function loadLufsWasmModule(): Promise<WebAssembly.Module> {
   lufsWasmModulePromise ??= fetch(lufsWasmUrl)
@@ -55,9 +59,8 @@ function response(success: boolean, error?: string): OffscreenResponse {
   return { success, session: session.snapshot(), error }
 }
 
-function notifySubscribers(): void {
+function postToSubscribers(message: SessionPortMessage): void {
   if (subscribers.size === 0) return
-  const message: SessionPortMessage = { type: 'SESSION_UPDATED', session: session.snapshot() }
   for (const port of subscribers) {
     try {
       port.postMessage(message)
@@ -65,6 +68,24 @@ function notifySubscribers(): void {
       subscribers.delete(port)
     }
   }
+}
+
+function notifySubscribers(): void {
+  postToSubscribers({ type: 'SESSION_UPDATED', session: session.snapshot() })
+}
+
+function flushMeterUpdates(): void {
+  meterNotificationTimer = undefined
+  if (pendingMeterUpdates.size === 0) return
+  const updates = Array.from(pendingMeterUpdates.values())
+  pendingMeterUpdates.clear()
+  postToSubscribers({ type: 'SESSION_METERS_UPDATED', updates })
+}
+
+function queueMeterUpdate(update: SessionMeterUpdate): void {
+  if (subscribers.size === 0) return
+  pendingMeterUpdates.set(update.tabId, update)
+  meterNotificationTimer ??= setTimeout(flushMeterUpdates, METER_NOTIFICATION_INTERVAL_MS)
 }
 
 function notifyCaptureEnded(tabId: number, reason: string): void {
@@ -181,7 +202,10 @@ function handleLufs(tabId: number, lufs: TabLufs): void {
     const processor = session.get(tabId)
     if (processor) applyEffectiveGain(processor)
   }
-  notifySubscribers()
+  const processor = session.get(tabId)
+  if (processor) {
+    queueMeterUpdate({ tabId, currentLufs: lufs, gainDb: processor.gainDb })
+  }
 }
 
 async function startCapture(
@@ -423,7 +447,14 @@ chrome.runtime.onConnect.addListener((port) => {
     type: 'SESSION_UPDATED',
     session: session.snapshot(),
   } satisfies SessionPortMessage)
-  port.onDisconnect.addListener(() => subscribers.delete(port))
+  port.onDisconnect.addListener(() => {
+    subscribers.delete(port)
+    if (subscribers.size === 0 && meterNotificationTimer !== undefined) {
+      clearTimeout(meterNotificationTimer)
+      meterNotificationTimer = undefined
+      pendingMeterUpdates.clear()
+    }
+  })
 })
 
 console.log('Offscreen audio session loaded')
