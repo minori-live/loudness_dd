@@ -3,6 +3,10 @@ import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 import { createApp } from 'vue'
 
 import App from './App.vue'
+import './styles/base.css'
+// UnoCSS exposes this stylesheet through its Vite plugin at build time.
+// eslint-disable-next-line import/no-unresolved
+import 'virtual:uno.css'
 // import router from './router'
 import { i18n } from './i18n'
 import { useSettingsStore } from './stores/settings'

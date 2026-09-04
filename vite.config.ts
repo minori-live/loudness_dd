@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { crx } from '@crxjs/vite-plugin'
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import vue from '@vitejs/plugin-vue'
+import UnoCSS from 'unocss/vite'
 import { defineConfig } from 'vite'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import zipPack from 'vite-plugin-zip-pack'
@@ -16,6 +17,7 @@ const appVersion = process.env.npm_package_version ?? '0.0.0'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    UnoCSS(),
     vue(),
     vueDevTools(),
     VueI18nPlugin({

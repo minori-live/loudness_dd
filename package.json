@@ -53,6 +53,7 @@
     "npm-run-all2": "^9.0.3",
     "prettier": "3.9.6",
     "typescript": "~6.0.3",
+    "unocss": "^66.9.2",
     "vite": "^8.2.0",
     "vite-plugin-vue-devtools": "^8.2.1",
     "vite-plugin-zip-pack": "^1.2.4",
