@@ -115,7 +115,7 @@ The stable `Gate` job is the single branch-protection check: it succeeds only wh
 formatting, workflow linting, ESLint, type checking, unit tests, and extension packaging
 all pass. Build archives are retained as workflow artifacts for 14 days.
 
-Pushing a tag matching the `package.json` version (for example `v1.0.5`) reruns Test and
+Pushing a tag matching the `package.json` version (for example `v1.1.0`) reruns Test and
 Build, generates SHA-256 checksums and artifact provenance, and creates a draft GitHub
 Release containing the versioned extension zip.
 
