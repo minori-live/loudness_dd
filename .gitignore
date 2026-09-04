@@ -40,3 +40,7 @@ public/_locales
 __screenshots__/
 
 test-results/
+
+
+# APM dependencies
+apm_modules/

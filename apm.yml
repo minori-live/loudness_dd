@@ -1,0 +1,21 @@
+name: heron
+version: 1.0.0
+description: APM project for Loudness DD
+author: Delton Ding
+targets:
+  - agent-skills
+dependencies:
+  apm:
+    - anthropics/skills/skills/frontend-design
+    - anthropics/skills/skills/skill-creator
+    - antfu/skills/skills/vue
+    - antfu/skills/skills/vite
+    - antfu/skills/skills/pnpm
+    - antfu/skills/skills/pinia
+    - antfu/skills/skills/vue-best-practices
+    - antfu/skills/skills/vue-testing-best-practices
+    - mattpocock/skills/skills/productivity/grill-me
+    - microsoft/apm/packages/apm-guide/.apm/skills/apm-usage
+    - vueuse/skills
+includes: auto
+scripts: {}
