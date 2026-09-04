@@ -3,22 +3,27 @@
 Audience: coding agents (Cursor/Copilot) and maintainers. This is a high-signal, task-oriented guide to modify, test, and ship changes to the Loudness DD Chrome extension safely.
 
 ## TL;DR Commands
-- Install: `pnpm install`
-- Dev (HMR for popup): `pnpm dev`
-- Build (type-check + bundle): `pnpm build`
-- Preview build: `pnpm preview`
-- Unit tests: `pnpm test:unit`
-- Lint/format/type-check: `pnpm lint`, `pnpm format`, `pnpm type-check`
 
-Node engines: `^20.19.0 || >=22.12.0`
+- Install toolchain: `mise install`
+- Install dependencies: `mise run install`
+- Dev (HMR for popup): `mise run dev`
+- Build (type-check + bundle + zip): `mise run build`
+- Full validation: `mise run check`
+- Lint/format/type-check: `mise run lint`, `mise run format`, `mise run type-check`
+
+The toolchain is locked in `mise.toml` and `mise.lock`: Node 24.18.0, pnpm 11.20.0,
+and actionlint 1.7.12.
 
 ## What this project does
+
 Loudness DD is a Chrome MV3 extension that:
+
 - Captures audio from selected tabs, measures loudness in LUFS (BS.1770-5), and balances levels toward a target LUFS.
 - Provides a limiter to prevent clipping.
 - Lets users register tabs, toggle auto-balance, set target LUFS, and manage per‑tab gain.
 
 ## Key architecture
+
 - MV3 Service Worker: background coordination, lifecycle, storage, and messaging.
   - File: [src/background.ts](src/background.ts)
 - Offscreen Document: runs Web Audio graph (worklet + compressor/limiter + gain), calculates LUFS, sends updates.
@@ -35,10 +40,13 @@ Loudness DD is a Chrome MV3 extension that:
 Permissions (MV3): `tabCapture`, `tabs`, `activeTab`, `offscreen`, `storage`.
 
 ## Message flow (core contracts)
+
 Handshake:
+
 - Offscreen → Background: `OFFSCREEN_READY`
 
 Background notification messages (no response expected):
+
 - `LUFS_UPDATE` { tabId, momentary, shortTerm, integrated, blockCount }
 - `CAPTURE_STARTED` { tabId }
 - `CAPTURE_STOPPED` { tabId }
@@ -49,6 +57,7 @@ Background notification messages (no response expected):
 - `LUFS_RESET` { tabId }
 
 Background request/response messages (async responses):
+
 - `GET_TABS` → { tabs, soloTabId }
 - `GET_AUTO_BALANCE_SETTINGS` → { settings }
 - `SET_AUTO_BALANCE_ENABLED` { enabled } → { success, settings }
@@ -66,6 +75,7 @@ Background request/response messages (async responses):
 - `RESET_LUFS_REQUEST` { tabId } → { success }
 
 Offscreen-targeted commands (Background → Offscreen via `target: 'offscreen'`):
+
 - `START_CAPTURE` { tabId, streamId } → { success, error? }
 - `STOP_CAPTURE` { tabId } → { success }
 - `SET_GAIN` { tabId, gainDb } → { success }
@@ -75,73 +85,91 @@ Offscreen-targeted commands (Background → Offscreen via `target: 'offscreen'`)
 - `GET_LIMITER` → { success, settings }
 
 Guard notes:
+
 - Integrated LUFS is only reliable after enough samples; background enforces a `MIN_BLOCKS_FOR_RELIABLE_LUFS` gate. Avoid relying on `-Infinity` readings.
 - Offscreen maintains one processor per `tabId`. Cleanup is crucial on stream end/navigation.
 
 ## Build, run, and release
+
 Dev:
-- `pnpm dev` launches Vite server for the popup UI (HMR). Background SW and offscreen page reload via CRX tooling on rebuilds.
+
+- `mise run dev` launches Vite server for the popup UI (HMR). Background SW and offscreen page reload via CRX tooling on rebuilds.
 
 Build:
-- `pnpm build` runs `vue-tsc --build` then Vite build. Output unpacked extension in `dist/`.
-- Release zip is automatically created at `release/release.zip` (via `vite-plugin-zip-pack`).
+
+- `mise run build` installs locked dependencies, runs `vue-tsc --build`, then runs the Vite build.
+- The unpacked extension is written to `dist/`.
+- The versioned release zip is written to `release/loudness-dd-v<version>.zip`.
 
 Load in Chrome:
-1) `pnpm build`
-2) `chrome://extensions/` → enable Developer mode → Load unpacked → select `dist`
+
+1. `mise run build`
+2. `chrome://extensions/` → enable Developer mode → Load unpacked → select `dist`
+
+CI and release:
+
+- `CI` calls the reusable `Test` and `Build` workflows in parallel and reports their combined result through the stable `Gate` job.
+- `Test` runs `mise run check`; `Build` runs `mise run ci:package`, verifies the manifest/archive version, and uploads the zip for 14 days.
+- A `v*` tag must match the version in `package.json`. `Publish` reruns Test and Build, creates checksums and provenance, then creates or updates a draft GitHub Release.
 
 ## Coding conventions
+
 - TypeScript-first. Avoid `any` and unsafe casts; use explicit interfaces for messages.
 - Prefer early returns; avoid deep nesting and try/catch without handling.
 - Keep background/offscreen message enums and interfaces in sync; add types for payloads.
 - Vue 3 Composition API + Pinia for state. Match existing style.
-- Run `pnpm type-check`, `pnpm lint`, `pnpm test:unit` before shipping.
+- Run `mise run check` before shipping.
 
 ## Safe-edit checklist (read before you change things)
-1) If you add/rename a message type:
+
+1. If you add/rename a message type:
    - Update both senders and receivers (background, offscreen, popup).
    - Extend the corresponding TypeScript interfaces.
    - Verify no message is incorrectly handled as a “notification” when a response is needed.
-2) Offscreen assets:
+2. Offscreen assets:
    - Offscreen entry must be an HTML page declared in Vite input: see [vite.config.ts](vite.config.ts) `rollupOptions.input.offscreen`.
-3) Manifest changes:
+3. Manifest changes:
    - Do not add new permissions without documented rationale. Review Chrome’s MV3 constraints.
-4) Audio changes:
+4. Audio changes:
    - Validate CPU/perf, clamp user-facing ranges (gain, thresholds, ratios).
    - Keep limiter defaults conservative (avoid audible pumping).
-5) Lifecycle:
+5. Lifecycle:
    - Preserve cleanup paths (`STREAM_ENDED`, `onRemoved`, `onUpdated`).
    - Keep badge updates coherent with auto-balance and tab count.
-6) Storage:
+6. Storage:
    - Persist only stable, recoverable state. Captured streams cannot be restored after reload; do not try to persist them.
 
 ## Common agent tasks
+
 - Add a new control in popup:
-  1) Create/extend a Pinia store in [src/stores/](src/stores).
-  2) Add a Vue component in [src/components/](src/components/) and wire UI → store.
-  3) Send messages to background for side effects; background may forward to offscreen.
-  4) Add unit tests for store logic and E2E to verify UI → audio impact if needed.
+  1. Create/extend a Pinia store in [src/stores/](src/stores).
+  2. Add a Vue component in [src/components/](src/components/) and wire UI → store.
+  3. Send messages to background for side effects; background may forward to offscreen.
+  4. Add unit tests for store logic and E2E to verify UI → audio impact if needed.
 
 - Add/modify a message:
-  1) Define payload interface(s) next to handler.
-  2) Extend background switch in [src/background.ts](src/background.ts).
-  3) Extend offscreen switch in [src/offscreen.ts](src/offscreen.ts) when targeted.
-  4) Update any popup callers.
+  1. Define payload interface(s) next to handler.
+  2. Extend background switch in [src/background.ts](src/background.ts).
+  3. Extend offscreen switch in [src/offscreen.ts](src/offscreen.ts) when targeted.
+  4. Update any popup callers.
 
 - Adjust limiter defaults:
-  1) Update offscreen defaults in [src/offscreen.ts](src/offscreen.ts) (`globalLimiterSettings`).
-  2) Ensure UI shows current values via `GET_LIMITER_SETTINGS`.
-  3) Add coverage for edge values (e.g., extreme ratios, fast attack).
+  1. Update offscreen defaults in [src/offscreen.ts](src/offscreen.ts) (`globalLimiterSettings`).
+  2. Ensure UI shows current values via `GET_LIMITER_SETTINGS`.
+  3. Add coverage for edge values (e.g., extreme ratios, fast attack).
 
 ## Tests
-- Unit (`vitest` + `@vue/test-utils`, `jsdom`): `pnpm test:unit`
-  - Location: [src/__tests__/](src/__tests__)
+
+- Unit (`vitest` + `@vue/test-utils`, `jsdom`): `mise run test`
+  - Location: [`src/__tests__/`](src/__tests__)
 
 Suggested gates before merging:
+
 - Green type-check, lint, unit tests.
 - For message contract changes, add/adjust minimal tests (store and handler).
 
 ## Troubleshooting
+
 - Offscreen never starts:
   - Ensure `OFFSCREEN_READY` is received by background and `ensureOffscreenDocument()` points at [offscreen.html](offscreen.html).
   - Verify permissions include `offscreen`.
@@ -154,8 +182,9 @@ Suggested gates before merging:
   - Offscreen connects `source → gain → limiter → destination` and also `source → worklet → destination` (silent output). Verify node connections and context state.
 
 ## Definition of Done (agent)
-- Commands pass: `pnpm type-check` → `pnpm lint` → `pnpm test:unit` → `pnpm build`.
+
+- Commands pass: `mise run check` and `mise run build`.
 - Message contracts updated consistently (types + handlers + callers).
 - No permission creep; manifest unchanged unless justified.
 - User-visible behavior validated (manual or E2E for critical flows).
-- Release artifact builds (`release/release.zip`) and unpacked dist loads in Chrome.
+- Versioned release artifact builds under `release/` and unpacked `dist/` loads in Chrome.

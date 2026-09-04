@@ -1,0 +1,73 @@
+[tools]
+actionlint = "1.7.12"
+node = "24.18.0"
+pnpm = "11.20.0"
+
+[settings]
+lockfile = true
+
+[tasks.install]
+description = "Install dependencies from the pnpm lockfile"
+run = "pnpm install --frozen-lockfile --prefer-offline"
+sources = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]
+outputs = ["node_modules/.pnpm/lock.yaml"]
+
+[tasks.dev]
+description = "Start the extension development server"
+depends = ["install"]
+run = "pnpm dev"
+
+[tasks.format]
+description = "Format the repository"
+depends = ["install"]
+run = "pnpm format"
+
+[tasks."format-check"]
+description = "Check repository formatting"
+depends = ["install"]
+run = "pnpm format:check"
+
+[tasks.lint]
+description = "Lint the repository without modifying files"
+depends = ["install"]
+run = "pnpm lint"
+
+[tasks."lint-workflows"]
+description = "Lint GitHub Actions workflows"
+run = "actionlint"
+
+[tasks."lint-fix"]
+description = "Lint the repository and apply safe fixes"
+depends = ["install"]
+run = "pnpm lint:fix"
+
+[tasks."type-check"]
+description = "Type-check the application and build configuration"
+depends = ["install"]
+run = "pnpm type-check"
+
+[tasks.test]
+description = "Run unit tests once"
+depends = ["install"]
+run = "pnpm test:unit"
+
+[tasks.check]
+description = "Run the full formatting, lint, type, and unit-test validation path"
+depends = ["install"]
+run = [
+  "pnpm format:check",
+  "actionlint",
+  "pnpm lint",
+  "pnpm type-check",
+  "pnpm test:unit",
+]
+
+[tasks.build]
+description = "Type-check, build, and package the extension"
+depends = ["install"]
+run = "pnpm build"
+
+[tasks."ci:package"]
+description = "Build the extension artifact for CI"
+depends = ["install"]
+run = "pnpm build"

@@ -1,0 +1,63 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  package:
+    name: Package extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build
+        with:
+          github-token: >-
+            ${{ github.event_name == 'pull_request' && '' || github.token }}
+
+      - name: Build and package extension
+        run: mise run ci:package
+
+      - name: Verify package contents and version
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          manifest_version="$(node -p "require('./dist/manifest.json').version")"
+          archive="release/loudness-dd-v${package_version}.zip"
+
+          if [[ "$manifest_version" != "$package_version" ]]; then
+            echo "::error::Built manifest version $manifest_version does not match package version $package_version."
+            exit 1
+          fi
+
+          if [[ ! -s "$archive" ]]; then
+            echo "::error::Expected release archive was not produced: $archive"
+            exit 1
+          fi
+
+          unzip -t "$archive" >/dev/null
+          if ! unzip -Z1 "$archive" | grep -Fxq manifest.json; then
+            echo "::error::Release archive does not contain manifest.json: $archive"
+            exit 1
+          fi
+
+      - name: Upload extension package
+        uses: actions/upload-artifact@v7
+        with:
+          name: loudness-dd-extension
+          path: release/*.zip
+          if-no-files-found: error
+          retention-days: 14

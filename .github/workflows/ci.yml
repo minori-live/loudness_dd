@@ -1,47 +1,46 @@
 name: CI
 
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.workflow }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-unit:
-    name: Build, type-check, lint, unit (Node ${{ matrix.node }})
+  test:
+    name: Test
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
+  build:
+    name: Build
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+
+  gate:
+    name: Gate
+    if: ${{ always() }}
+    needs: [test, build]
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [20.x, 22.x]
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm run lint
-      
-      - name: Type check
-        run: pnpm run type-check
-
-      - name: Unit tests
-        run: pnpm run test:unit -- --reporter=dot
-
-      - name: Build (includes type-check)
-        run: pnpm run build
+      - name: Require successful CI jobs
+        shell: bash
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          if [[ "$TEST_RESULT" != "success" || "$BUILD_RESULT" != "success" ]]; then
+            echo "::error::Required CI jobs did not succeed (Test: $TEST_RESULT, Build: $BUILD_RESULT)."
+            exit 1
+          fi
