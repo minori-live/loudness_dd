@@ -103,8 +103,8 @@ mise run format
 mise run lint-fix
 ```
 
-Node, pnpm, and actionlint are pinned in `mise.toml` and checksummed for supported
-platforms in `mise.lock`.
+Node, pnpm, actionlint, and ShellCheck are pinned in `mise.toml` and checksummed for
+supported platforms in `mise.lock`.
 
 ### Continuous Integration and Releases
 

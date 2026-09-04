@@ -12,7 +12,7 @@ Audience: coding agents (Cursor/Copilot) and maintainers. This is a high-signal,
 - Lint/format/type-check: `mise run lint`, `mise run format`, `mise run type-check`
 
 The toolchain is locked in `mise.toml` and `mise.lock`: Node 24.18.0, pnpm 11.20.0,
-and actionlint 1.7.12.
+actionlint 1.7.12, and ShellCheck 0.11.0.
 
 ## What this project does
 

@@ -84,7 +84,7 @@ jobs:
       - name: Generate SHA-256 checksums
         shell: bash
         working-directory: release-assets
-        run: sha256sum * > SHA256SUMS
+        run: sha256sum ./* > SHA256SUMS
 
       - name: Attest release artifacts
         if: github.event.repository.visibility == 'public'
