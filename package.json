@@ -19,8 +19,8 @@
     "build-only": "pnpm wasm:build && vite build",
     "wasm:build": "node scripts/build-wasm.mjs",
     "type-check": "vue-tsc --build",
-    "lint": "eslint . --cache --max-warnings 0 && cargo clippy --manifest-path crates/lufs-meter/Cargo.toml --all-targets --locked -- -D warnings",
-    "lint:fix": "eslint . --fix --cache --max-warnings 0",
+    "lint": "pnpm wasm:build && eslint . --cache --max-warnings 0 && cargo clippy --manifest-path crates/lufs-meter/Cargo.toml --all-targets --locked -- -D warnings",
+    "lint:fix": "pnpm wasm:build && eslint . --fix --cache --max-warnings 0",
     "format": "prettier --write . && cargo fmt --manifest-path crates/lufs-meter/Cargo.toml",
     "format:check": "prettier --check . && cargo fmt --manifest-path crates/lufs-meter/Cargo.toml -- --check"
   },
