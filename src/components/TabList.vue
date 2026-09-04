@@ -10,7 +10,7 @@ import TabCard from './tabs/TabCard.vue'
 const tabsStore = useTabsStore()
 const { t } = useI18n()
 
-const tabs = computed(() => tabsStore.tabs)
+const tabs = computed(() => tabsStore.orderedTabs)
 const targetLufs = computed(() => tabsStore.targetLufs)
 const soloTabId = computed(() => tabsStore.soloTabId)
 const focusTabId = computed(() => tabsStore.focusTabId)

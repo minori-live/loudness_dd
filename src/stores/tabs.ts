@@ -26,6 +26,11 @@ export function hasEnoughSamples(lufs: TabLufs): boolean {
   return lufs.blockCount >= MIN_BLOCKS_FOR_RELIABLE_LUFS
 }
 
+interface BrowserTabPosition {
+  windowId: number
+  index: number
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
@@ -51,6 +56,7 @@ function isCommandResponse(response: unknown): response is CommandResponse {
 
 export const useTabsStore = defineStore('tabs', () => {
   const tabs = shallowRef<CapturedTab[]>([])
+  const browserTabPositions = shallowRef(new Map<number, BrowserTabPosition>())
   const soloTabId = shallowRef<number | null>(null)
   const focusTabId = shallowRef<number | null>(null)
   const autoBalanceSettings = shallowRef<AutoBalanceSettings>({
@@ -63,8 +69,44 @@ export const useTabsStore = defineStore('tabs', () => {
 
   let sessionPort: chrome.runtime.Port | null = null
   let syncActive = false
+  let tabOrderSyncActive = false
+  let tabOrderQueryRevision = 0
 
   const capturedTabIds = computed(() => tabs.value.map((tab) => tab.tabId))
+  const orderedTabs = computed(() => {
+    const windowGroups = new Map<
+      number,
+      { firstSessionIndex: number; entries: Array<{ tab: CapturedTab; index: number }> }
+    >()
+    const tabsWithoutPosition: CapturedTab[] = []
+
+    tabs.value.forEach((tab, sessionIndex) => {
+      const position = browserTabPositions.value.get(tab.tabId)
+      if (!position) {
+        tabsWithoutPosition.push(tab)
+        return
+      }
+
+      const group = windowGroups.get(position.windowId)
+      if (group) {
+        group.entries.push({ tab, index: position.index })
+        return
+      }
+
+      windowGroups.set(position.windowId, {
+        firstSessionIndex: sessionIndex,
+        entries: [{ tab, index: position.index }],
+      })
+    })
+
+    const positionedTabs = Array.from(windowGroups.values())
+      .sort((left, right) => left.firstSessionIndex - right.firstSessionIndex)
+      .flatMap((group) =>
+        group.entries.sort((left, right) => left.index - right.index).map(({ tab }) => tab),
+      )
+
+    return [...positionedTabs, ...tabsWithoutPosition]
+  })
   const hasCaptures = computed(() => tabs.value.length > 0)
   const targetLufs = computed(() => autoBalanceSettings.value.targetLufs)
   const averageLufs = computed(() => {
@@ -112,6 +154,51 @@ export const useTabsStore = defineStore('tabs', () => {
     port.onDisconnect.addListener(() => {
       if (sessionPort === port) sessionPort = null
     })
+  }
+
+  async function refreshBrowserTabPositions(): Promise<void> {
+    const revision = ++tabOrderQueryRevision
+
+    try {
+      const browserTabs = await chrome.tabs.query({})
+      if (!syncActive || revision !== tabOrderQueryRevision) return
+
+      browserTabPositions.value = new Map(
+        browserTabs.flatMap((tab) =>
+          tab.id === undefined
+            ? []
+            : [[tab.id, { windowId: tab.windowId, index: tab.index }] as const],
+        ),
+      )
+    } catch (cause) {
+      console.warn('Failed to refresh browser tab order:', cause)
+    }
+  }
+
+  function handleBrowserTabOrderChanged(): void {
+    void refreshBrowserTabPositions()
+  }
+
+  function connectBrowserTabOrderSync(): void {
+    if (tabOrderSyncActive) return
+    tabOrderSyncActive = true
+    chrome.tabs.onMoved.addListener(handleBrowserTabOrderChanged)
+    chrome.tabs.onAttached.addListener(handleBrowserTabOrderChanged)
+    chrome.tabs.onDetached.addListener(handleBrowserTabOrderChanged)
+    chrome.tabs.onCreated.addListener(handleBrowserTabOrderChanged)
+    chrome.tabs.onRemoved.addListener(handleBrowserTabOrderChanged)
+  }
+
+  function disconnectBrowserTabOrderSync(): void {
+    if (!tabOrderSyncActive) return
+    tabOrderSyncActive = false
+    chrome.tabs.onMoved.removeListener(handleBrowserTabOrderChanged)
+    chrome.tabs.onAttached.removeListener(handleBrowserTabOrderChanged)
+    chrome.tabs.onDetached.removeListener(handleBrowserTabOrderChanged)
+    chrome.tabs.onCreated.removeListener(handleBrowserTabOrderChanged)
+    chrome.tabs.onRemoved.removeListener(handleBrowserTabOrderChanged)
+    tabOrderQueryRevision += 1
+    browserTabPositions.value = new Map()
   }
 
   async function sendCommand(message: BackgroundRequest, fallback: string): Promise<boolean> {
@@ -162,7 +249,10 @@ export const useTabsStore = defineStore('tabs', () => {
           { type: 'START_CAPTURE_REQUEST', tabId: activeTab.id },
           'Failed to start capture',
         )
-        if (success) connectSessionPort()
+        if (success) {
+          connectSessionPort()
+          await refreshBrowserTabPositions()
+        }
         return success
       } catch (cause) {
         console.error('Failed to register tab:', cause)
@@ -250,13 +340,15 @@ export const useTabsStore = defineStore('tabs', () => {
   async function startSync(): Promise<void> {
     if (syncActive) return
     syncActive = true
-    await fetchState()
+    connectBrowserTabOrderSync()
+    await Promise.all([fetchState(), refreshBrowserTabPositions()])
     connectSessionPort()
   }
 
   function stopSync(): void {
     syncActive = false
     disconnectSessionPort()
+    disconnectBrowserTabOrderSync()
   }
 
   function clearError(): void {
@@ -265,6 +357,7 @@ export const useTabsStore = defineStore('tabs', () => {
 
   return {
     tabs,
+    orderedTabs,
     soloTabId,
     focusTabId,
     autoBalanceSettings,

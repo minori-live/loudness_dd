@@ -13,6 +13,7 @@ vi.mock('@/stores/tabs', () => {
       error: null,
       hasCaptures: false,
       tabs: [],
+      orderedTabs: [],
       targetLufs: -14,
       soloTabId: null,
       hasSolo: false,

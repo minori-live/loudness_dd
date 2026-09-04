@@ -2,7 +2,7 @@
 actionlint = "1.7"
 node = "24"
 pnpm = "11"
-rust = { version = "latest", channel = "stable", targets = ["wasm32-unknown-unknown"] }
+rust = { version = "latest", channel = "stable", components = ["clippy", "rustfmt"], targets = ["wasm32-unknown-unknown"] }
 shellcheck = "0.11"
 apm = "latest"
 

@@ -162,6 +162,7 @@ version = "1.98.0"
 backend = "core:rust"
 
 [tools.rust.options]
+components = "clippy,rustfmt"
 targets = "wasm32-unknown-unknown"
 
 [[tools.shellcheck]]
