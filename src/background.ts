@@ -39,17 +39,11 @@ const BACKGROUND_REQUEST_TYPES = new Set<BackgroundRequest['type']>([
   'TOGGLE_FOCUS',
   'CLEAR_FOCUS',
   'SET_AUTO_FOCUS_ENABLED',
-  'AUTO_BALANCE_REQUEST',
-  'SET_AUTO_BALANCE_ENABLED',
   'SET_TARGET_LUFS',
   'SET_LIMITER_SETTINGS',
   'RESET_LUFS_REQUEST',
 ])
 const pendingCaptures = new Map<number, Promise<CommandResponse>>()
-
-function clamp(value: number, minimum: number, maximum: number, fallback: number): number {
-  return Number.isFinite(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback
-}
 
 function toExtensionState(session: SessionSnapshot, settings: PersistedSettings): ExtensionState {
   return {
@@ -60,11 +54,9 @@ function toExtensionState(session: SessionSnapshot, settings: PersistedSettings)
   }
 }
 
-async function updateBadge(tabCount: number, autoBalanceEnabled: boolean): Promise<void> {
+async function updateBadge(tabCount: number): Promise<void> {
   await chrome.action.setBadgeText({ text: tabCount === 0 ? '' : String(tabCount) })
-  await chrome.action.setBadgeBackgroundColor({
-    color: autoBalanceEnabled ? '#48bb78' : '#4299e1',
-  })
+  await chrome.action.setBadgeBackgroundColor({ color: '#48bb78' })
 }
 
 async function getState(): Promise<ExtensionState> {
@@ -75,7 +67,7 @@ async function getState(): Promise<ExtensionState> {
     settings,
   })
   const session = result?.session ?? emptySession()
-  await updateBadge(session.tabs.length, settings.autoBalance.enabled)
+  await updateBadge(session.tabs.length)
   return toExtensionState(session, settings)
 }
 
@@ -131,7 +123,7 @@ async function startTabCapture(tabId: number): Promise<CommandResponse> {
     })
     const focusedSession = result.success ? await syncAutoFocus() : null
     const session = focusedSession ?? result.session
-    await updateBadge(session.tabs.length, settings.autoBalance.enabled)
+    await updateBadge(session.tabs.length)
     if (!result.success) await closeOffscreenIfIdle(session.tabs.length)
     return {
       success: result.success,
@@ -168,7 +160,7 @@ async function runSessionCommand(message: OffscreenRequest): Promise<CommandResp
     }
   }
 
-  await updateBadge(result.session.tabs.length, settings.autoBalance.enabled)
+  await updateBadge(result.session.tabs.length)
   if (message.type === 'STOP_CAPTURE') await closeOffscreenIfIdle(result.session.tabs.length)
   return {
     success: result.success,
@@ -187,7 +179,7 @@ async function applySettingsUpdate(
     settings,
   })
   const session = result?.session ?? emptySession()
-  await updateBadge(session.tabs.length, settings.autoBalance.enabled)
+  await updateBadge(session.tabs.length)
   return { success: true, state: toExtensionState(session, settings) }
 }
 
@@ -243,27 +235,6 @@ async function handleRequest(message: BackgroundRequest): Promise<CommandRespons
       const settings = await getSettings()
       return session ? { success: true, state: toExtensionState(session, settings) } : result
     }
-    case 'AUTO_BALANCE_REQUEST': {
-      const settings = await getSettings()
-      return runSessionCommand({
-        type: 'AUTO_BALANCE_ONCE',
-        target: OFFSCREEN_TARGET,
-        targetLufs: clamp(
-          message.targetLufs ?? settings.autoBalance.targetLufs,
-          -60,
-          0,
-          settings.autoBalance.targetLufs,
-        ),
-      })
-    }
-    case 'SET_AUTO_BALANCE_ENABLED':
-      return applySettingsUpdate((current) =>
-        normalizeSettings(
-          { ...current.autoBalance, enabled: message.enabled },
-          current.limiter,
-          current.autoFocus,
-        ),
-      )
     case 'SET_TARGET_LUFS':
       return applySettingsUpdate((current) =>
         normalizeSettings(
@@ -290,9 +261,8 @@ async function handleRequest(message: BackgroundRequest): Promise<CommandRespons
 }
 
 async function handleCaptureEnded(message: CaptureEndedMessage): Promise<void> {
-  const settings = await getSettings()
   console.log(`Capture ended for tab ${message.tabId}: ${message.reason}`)
-  await updateBadge(message.tabCount, settings.autoBalance.enabled)
+  await updateBadge(message.tabCount)
   await closeOffscreenIfIdle(message.tabCount)
 }
 
@@ -323,14 +293,13 @@ chrome.runtime.onMessage.addListener((rawMessage: unknown, _sender, sendResponse
 })
 
 async function stopExistingCapture(tabId: number): Promise<void> {
-  const settings = await getSettings()
   const result = await sendToExistingOffscreen({
     type: 'STOP_CAPTURE',
     target: OFFSCREEN_TARGET,
     tabId,
   })
   if (!result) return
-  await updateBadge(result.session.tabs.length, settings.autoBalance.enabled)
+  await updateBadge(result.session.tabs.length)
   await closeOffscreenIfIdle(result.session.tabs.length)
 }
 

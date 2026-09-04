@@ -4,8 +4,8 @@ import { normalizeSettings } from '@/background/settings'
 
 describe('normalizeSettings', () => {
   it('merges stored partial settings with defaults', () => {
-    expect(normalizeSettings({ enabled: true }, { ratio: 8 })).toMatchObject({
-      autoBalance: { enabled: true, targetLufs: -14 },
+    expect(normalizeSettings(undefined, { ratio: 8 })).toMatchObject({
+      autoBalance: { targetLufs: -14 },
       autoFocus: { enabled: false },
       limiter: { enabled: false, thresholdDb: -1, ratio: 8 },
     })
@@ -17,7 +17,7 @@ describe('normalizeSettings', () => {
 
   it('clamps invalid persisted values at the boundary', () => {
     const settings = normalizeSettings(
-      { enabled: true, targetLufs: 20 },
+      { targetLufs: 20 },
       { enabled: true, thresholdDb: -200, kneeDb: 80, ratio: 0, attackMs: -1 },
     )
 

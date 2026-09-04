@@ -8,8 +8,6 @@ const tabsStore = useTabsStore()
 const { t } = useI18n()
 
 const targetLufs = computed(() => tabsStore.targetLufs)
-const isAutoBalancing = computed(() => tabsStore.isAutoBalancing)
-const hasCaptures = computed(() => tabsStore.hasCaptures)
 const averageLufs = computed(() => tabsStore.averageLufs)
 
 function formatLufs(lufs: number): string {
@@ -23,10 +21,6 @@ async function handleTargetChange(event: Event): Promise<void> {
   if (!isNaN(value)) {
     await tabsStore.setTargetLufs(value)
   }
-}
-
-async function handleToggleAutoBalance(): Promise<void> {
-  await tabsStore.toggleAutoBalance()
 }
 
 const presets = [
@@ -45,7 +39,7 @@ async function applyPreset(value: number): Promise<void> {
   <div class="auto-balance">
     <div class="section-header">
       <h3>{{ t('autobalance.title') }}</h3>
-      <div v-if="hasCaptures" class="average-lufs">
+      <div class="average-lufs">
         <span class="label">{{ t('autobalance.avg') }}</span>
         <span class="value">{{ formatLufs(averageLufs) }} LUFS</span>
       </div>
@@ -85,27 +79,6 @@ async function applyPreset(value: number): Promise<void> {
           <span class="preset-value">{{ preset.value }}</span>
         </button>
       </div>
-    </div>
-
-    <!-- Balance Actions -->
-    <div class="balance-actions">
-      <button
-        class="balance-btn continuous"
-        :class="{ active: isAutoBalancing }"
-        :disabled="!hasCaptures"
-        @click="handleToggleAutoBalance"
-      >
-        <span class="btn-icon">{{ isAutoBalancing ? '⏸️' : '🔄' }}</span>
-        <span class="btn-text">{{
-          isAutoBalancing ? t('autobalance.auto.stop') : t('autobalance.auto.start')
-        }}</span>
-      </button>
-    </div>
-
-    <!-- Auto-balance indicator -->
-    <div v-if="isAutoBalancing" class="auto-indicator">
-      <div class="indicator-dot"></div>
-      <span>{{ t('autobalance.running') }}: {{ targetLufs }} LUFS</span>
     </div>
   </div>
 </template>
@@ -254,90 +227,5 @@ async function applyPreset(value: number): Promise<void> {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 9px;
   opacity: 0.7;
-}
-
-.balance-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.balance-btn {
-  flex: 1;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.balance-btn.continuous {
-  background: rgba(255, 255, 255, 0.05);
-  color: #a0aec0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.balance-btn.continuous:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e2e8f0;
-}
-
-.balance-btn.continuous.active {
-  background: linear-gradient(145deg, #48bb78, #38a169);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
-}
-
-.balance-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
-.btn-icon {
-  font-size: 14px;
-}
-
-.btn-text {
-  white-space: nowrap;
-}
-
-.auto-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: rgba(72, 187, 120, 0.1);
-  border-radius: 6px;
-  font-size: 11px;
-  color: #48bb78;
-}
-
-.indicator-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #48bb78;
-  box-shadow: 0 0 10px #48bb78;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(0.9);
-  }
 }
 </style>

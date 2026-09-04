@@ -66,7 +66,6 @@ export const useTabsStore = defineStore('tabs', () => {
 
   const capturedTabIds = computed(() => tabs.value.map((tab) => tab.tabId))
   const hasCaptures = computed(() => tabs.value.length > 0)
-  const isAutoBalancing = computed(() => autoBalanceSettings.value.enabled)
   const targetLufs = computed(() => autoBalanceSettings.value.targetLufs)
   const averageLufs = computed(() => {
     const validTabs = tabs.value.filter((tab) => Number.isFinite(tab.currentLufs.integrated))
@@ -212,21 +211,6 @@ export const useTabsStore = defineStore('tabs', () => {
     return sendCommand({ type: 'SET_AUTO_FOCUS_ENABLED', enabled }, 'Failed to set auto-focus')
   }
 
-  function autoBalanceNow(): Promise<boolean> {
-    return sendCommand(
-      { type: 'AUTO_BALANCE_REQUEST', targetLufs: autoBalanceSettings.value.targetLufs },
-      'Failed to auto-balance',
-    )
-  }
-
-  function setAutoBalanceEnabled(enabled: boolean): Promise<boolean> {
-    return sendCommand({ type: 'SET_AUTO_BALANCE_ENABLED', enabled }, 'Failed to set auto-balance')
-  }
-
-  async function toggleAutoBalance(): Promise<void> {
-    await setAutoBalanceEnabled(!autoBalanceSettings.value.enabled)
-  }
-
   function setTargetLufs(value: number): Promise<boolean> {
     return sendCommand({ type: 'SET_TARGET_LUFS', targetLufs: value }, 'Failed to set target LUFS')
   }
@@ -290,7 +274,6 @@ export const useTabsStore = defineStore('tabs', () => {
     error,
     capturedTabIds,
     hasCaptures,
-    isAutoBalancing,
     targetLufs,
     averageLufs,
     isLimiterEnabled,
@@ -312,9 +295,6 @@ export const useTabsStore = defineStore('tabs', () => {
     toggleFocus,
     clearFocus,
     setAutoFocusEnabled,
-    autoBalanceNow,
-    setAutoBalanceEnabled,
-    toggleAutoBalance,
     setTargetLufs,
     setLimiterEnabled,
     setLimiterThreshold,

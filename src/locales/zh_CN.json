@@ -22,13 +22,7 @@
       "streaming": "流媒体",
       "podcast": "播客",
       "loud": "响亮"
-    },
-    "balanceNow": "立即平衡",
-    "auto": {
-      "start": "自动平衡",
-      "stop": "停止自动"
-    },
-    "running": "后台自动平衡中"
+    }
   },
   "limiter": {
     "title": "输出压限",
@@ -90,7 +84,7 @@
     "maxBoost": "最大增益：",
     "status": {
       "collecting": "正在采样…",
-      "ready": "可自动平衡",
+      "ready": "自动平衡中",
       "paused": "已暂停"
     }
   },

@@ -25,8 +25,8 @@
 
 ### Auto Volume Balancing
 
-- **One-shot balance**: Instantly normalize all tabs to your target LUFS
-- **Continuous auto-balance**: Keep tabs balanced in real-time as content changes
+- Starts automatically whenever a tab is registered
+- Keeps monitored tabs balanced in real time as content changes
 - Supports multiple target presets:
   - 📺 **Broadcast** (-24 LUFS)
   - 🎧 **Streaming** (-14 LUFS)
@@ -123,10 +123,9 @@ Release containing the versioned extension zip.
 
 1. **Click the extension icon** to open the popup
 2. **Navigate to a tab** with audio content (YouTube, Spotify, etc.)
-3. **Click "Register Current Tab"** to start capturing audio
+3. **Click "Register Current Tab"** to start capturing audio and automatic balancing
 4. **Repeat** for other tabs you want to monitor
 5. **Adjust the target LUFS** using the slider or presets
-6. **Click "Balance Now"** for one-time normalization, or **"Auto Balance"** for continuous adjustment
 
 ## 📐 How It Works
 

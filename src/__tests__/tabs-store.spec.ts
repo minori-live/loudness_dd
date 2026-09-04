@@ -21,7 +21,7 @@ function extensionState(integrated: number): ExtensionState {
     ],
     soloTabId: null,
     focusTabId: null,
-    autoBalanceSettings: { enabled: false, targetLufs: -14 },
+    autoBalanceSettings: { targetLufs: -14 },
     autoFocusSettings: { enabled: false },
     limiterSettings: {
       enabled: false,

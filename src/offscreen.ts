@@ -160,12 +160,10 @@ async function endCapture(tabId: number, reason: string): Promise<void> {
 
 function handleLufs(tabId: number, lufs: TabLufs): void {
   if (!session.updateLufs(tabId, lufs)) return
-  if (settings.autoBalance.enabled) {
-    const gain = session.autoBalance(tabId, settings.autoBalance.targetLufs)
-    if (gain !== undefined) {
-      const processor = session.get(tabId)
-      if (processor) applyEffectiveGain(processor)
-    }
+  const gain = session.autoBalance(tabId, settings.autoBalance.targetLufs)
+  if (gain !== undefined) {
+    const processor = session.get(tabId)
+    if (processor) applyEffectiveGain(processor)
   }
   notifySubscribers()
 }
@@ -330,16 +328,6 @@ function setFocus(tabId: number | null): OffscreenResponse {
   return response(true)
 }
 
-function autoBalanceOnce(targetLufs: number): OffscreenResponse {
-  for (const processor of session.values()) {
-    if (session.autoBalance(processor.tabId, targetLufs) !== undefined) {
-      applyEffectiveGain(processor)
-    }
-  }
-  notifySubscribers()
-  return response(true)
-}
-
 function handleMessage(message: OffscreenRequest): OffscreenResponse | Promise<OffscreenResponse> {
   switch (message.type) {
     case 'START_CAPTURE':
@@ -366,8 +354,6 @@ function handleMessage(message: OffscreenRequest): OffscreenResponse | Promise<O
       applyAllGains()
       notifySubscribers()
       return response(true)
-    case 'AUTO_BALANCE_ONCE':
-      return autoBalanceOnce(message.targetLufs)
     case 'RESET_LUFS': {
       const processor = session.get(message.tabId)
       if (!processor) return response(false, 'Tab is not being captured')

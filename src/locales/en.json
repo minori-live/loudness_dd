@@ -22,13 +22,7 @@
       "streaming": "Streaming",
       "podcast": "Podcast",
       "loud": "Loud"
-    },
-    "balanceNow": "Balance Now",
-    "auto": {
-      "start": "Auto Balance",
-      "stop": "Stop Auto"
-    },
-    "running": "Running in background"
+    }
   },
   "limiter": {
     "title": "Output Limiter",
@@ -90,7 +84,7 @@
     "maxBoost": "Max boost:",
     "status": {
       "collecting": "Collecting samples...",
-      "ready": "Ready for auto-balance",
+      "ready": "Auto-balancing",
       "paused": "Paused"
     }
   },

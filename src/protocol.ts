@@ -27,7 +27,6 @@ export interface CapturedTab {
 }
 
 export interface AutoBalanceSettings {
-  enabled: boolean
   targetLufs: number
 }
 
@@ -63,7 +62,6 @@ export interface ExtensionState extends SessionSnapshot {
 }
 
 export const DEFAULT_AUTO_BALANCE_SETTINGS: Readonly<AutoBalanceSettings> = {
-  enabled: false,
   targetLufs: -14,
 }
 
@@ -112,8 +110,6 @@ export type BackgroundRequest =
   | { type: 'TOGGLE_FOCUS'; tabId: number }
   | { type: 'CLEAR_FOCUS' }
   | { type: 'SET_AUTO_FOCUS_ENABLED'; enabled: boolean }
-  | { type: 'AUTO_BALANCE_REQUEST'; targetLufs?: number }
-  | { type: 'SET_AUTO_BALANCE_ENABLED'; enabled: boolean }
   | { type: 'SET_TARGET_LUFS'; targetLufs: number }
   | { type: 'SET_LIMITER_SETTINGS'; settings: Partial<LimiterSettings> }
   | { type: 'RESET_LUFS_REQUEST'; tabId: number }
@@ -140,7 +136,6 @@ export type OffscreenRequest =
   | { type: 'TOGGLE_FOCUS'; target: typeof OFFSCREEN_TARGET; tabId: number }
   | { type: 'SET_FOCUS'; target: typeof OFFSCREEN_TARGET; tabId: number | null }
   | { type: 'CLEAR_FOCUS'; target: typeof OFFSCREEN_TARGET }
-  | { type: 'AUTO_BALANCE_ONCE'; target: typeof OFFSCREEN_TARGET; targetLufs: number }
   | { type: 'RESET_LUFS'; target: typeof OFFSCREEN_TARGET; tabId: number }
   | {
       type: 'SYNC_SETTINGS'

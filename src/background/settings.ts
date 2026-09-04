@@ -20,10 +20,6 @@ export function normalizeSettings(
 ): PersistedSettings {
   return {
     autoBalance: {
-      enabled:
-        typeof autoBalance?.enabled === 'boolean'
-          ? autoBalance.enabled
-          : DEFAULT_AUTO_BALANCE_SETTINGS.enabled,
       targetLufs: clamp(
         autoBalance?.targetLufs ?? DEFAULT_AUTO_BALANCE_SETTINGS.targetLufs,
         -60,
