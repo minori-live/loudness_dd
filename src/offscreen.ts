@@ -22,15 +22,20 @@ import lufsWasmUrl from '@/wasm/lufs_meter.wasm?url'
 import lufsProcessorUrl from '@/worklets/lufs-processor?worker&url'
 
 interface TabAudioProcessor extends SessionTabState {
-  audioContext: AudioContext
   sourceNode: MediaStreamAudioSourceNode
   gainNode: GainNode
   limiterNode: DynamicsCompressorNode
+  limiterEnabled: boolean | null
   workletNode: AudioWorkletNode
   stream: MediaStream
   trackEndedHandler: () => void
-  contextStateHandler: () => void
   lastAutoGainUpdateTime: number
+}
+
+interface AudioEngine {
+  context: AudioContext
+  wasmModule: WebAssembly.Module
+  contextStateHandler: () => void
 }
 
 const session = new SessionState<TabAudioProcessor>()
@@ -43,6 +48,9 @@ const AUTO_GAIN_TIME_CONSTANT_SECONDS = 0.05
 let settings = createDefaultSettings()
 let lufsWasmModulePromise: Promise<WebAssembly.Module> | undefined
 let meterNotificationTimer: number | undefined
+let audioEngine: AudioEngine | undefined
+let audioEnginePromise: Promise<AudioEngine> | undefined
+let pendingCaptureStarts = 0
 
 function loadLufsWasmModule(): Promise<WebAssembly.Module> {
   lufsWasmModulePromise ??= fetch(lufsWasmUrl)
@@ -56,6 +64,54 @@ function loadLufsWasmModule(): Promise<WebAssembly.Module> {
       throw error
     })
   return lufsWasmModulePromise
+}
+
+async function createAudioEngine(): Promise<AudioEngine> {
+  const context = new AudioContext()
+  try {
+    const [wasmModule] = await Promise.all([
+      loadLufsWasmModule(),
+      context.audioWorklet.addModule(lufsProcessorUrl),
+    ])
+    await context.resume()
+    const contextStateHandler = () => {
+      if (context.state !== 'closed') return
+      if (audioEngine?.context === context) audioEngine = undefined
+      for (const processor of Array.from(session.values())) {
+        void endCapture(processor.tabId, 'Audio context closed')
+      }
+    }
+    context.addEventListener('statechange', contextStateHandler)
+    return { context, wasmModule, contextStateHandler }
+  } catch (error) {
+    if (context.state !== 'closed') await context.close()
+    throw error
+  }
+}
+
+function getAudioEngine(): Promise<AudioEngine> {
+  if (audioEngine) return Promise.resolve(audioEngine)
+  audioEnginePromise ??= createAudioEngine()
+    .then((engine) => {
+      audioEngine = engine
+      return engine
+    })
+    .finally(() => {
+      audioEnginePromise = undefined
+    })
+  return audioEnginePromise
+}
+
+async function closeAudioEngineIfIdle(): Promise<void> {
+  if (session.size !== 0 || pendingCaptureStarts !== 0 || !audioEngine) return
+  const engine = audioEngine
+  audioEngine = undefined
+  engine.context.removeEventListener('statechange', engine.contextStateHandler)
+  try {
+    if (engine.context.state !== 'closed') await engine.context.close()
+  } catch {
+    // Chrome may close the shared context while the final capture is being removed.
+  }
 }
 
 function response(success: boolean, error?: string): OffscreenResponse {
@@ -102,28 +158,40 @@ function notifyCaptureEnded(tabId: number, reason: string): void {
 }
 
 function applyLimiterSettings(node: DynamicsCompressorNode, limiter: LimiterSettings): void {
+  if (!limiter.enabled) return
   const time = node.context.currentTime
-  if (limiter.enabled) {
-    node.threshold.setValueAtTime(limiter.thresholdDb, time)
-    node.knee.setValueAtTime(limiter.kneeDb, time)
-    node.ratio.setValueAtTime(limiter.ratio, time)
-    node.attack.setValueAtTime(limiter.attackMs / 1000, time)
-    node.release.setValueAtTime(limiter.releaseMs / 1000, time)
+  node.threshold.setValueAtTime(limiter.thresholdDb, time)
+  node.knee.setValueAtTime(limiter.kneeDb, time)
+  node.ratio.setValueAtTime(limiter.ratio, time)
+  node.attack.setValueAtTime(limiter.attackMs / 1000, time)
+  node.release.setValueAtTime(limiter.releaseMs / 1000, time)
+}
+
+function configureLimiter(processor: TabAudioProcessor, limiter: LimiterSettings): void {
+  if (processor.limiterEnabled === limiter.enabled) {
+    applyLimiterSettings(processor.limiterNode, limiter)
     return
   }
 
-  node.threshold.setValueAtTime(0, time)
-  node.knee.setValueAtTime(40, time)
-  node.ratio.setValueAtTime(1, time)
-  node.attack.setValueAtTime(0, time)
-  node.release.setValueAtTime(0.25, time)
+  if (processor.limiterEnabled !== null) {
+    processor.gainNode.disconnect()
+    processor.limiterNode.disconnect()
+  }
+  if (limiter.enabled) {
+    applyLimiterSettings(processor.limiterNode, limiter)
+    processor.gainNode.connect(processor.limiterNode)
+    processor.limiterNode.connect(processor.gainNode.context.destination)
+  } else {
+    processor.gainNode.connect(processor.gainNode.context.destination)
+  }
+  processor.limiterEnabled = limiter.enabled
 }
 
 function applyEffectiveGain(processor: TabAudioProcessor, smooth = false): void {
   const gain = session.isMuted(processor.tabId)
     ? 0
     : dbToGain(processor.gainDb + session.gainOffsetDb(processor.tabId))
-  const time = processor.audioContext.currentTime
+  const time = processor.gainNode.context.currentTime
   processor.gainNode.gain.cancelScheduledValues(time)
   if (smooth) {
     processor.gainNode.gain.setTargetAtTime(gain, time, AUTO_GAIN_TIME_CONSTANT_SECONDS)
@@ -147,7 +215,7 @@ function syncSettings(nextSettings: PersistedSettings): void {
   }
   if (limiterChanged) {
     for (const processor of session.values()) {
-      applyLimiterSettings(processor.limiterNode, settings.limiter)
+      configureLimiter(processor, settings.limiter)
     }
   }
 }
@@ -159,8 +227,6 @@ async function performCleanup(tabId: number): Promise<boolean> {
   for (const track of processor.stream.getAudioTracks()) {
     track.removeEventListener('ended', processor.trackEndedHandler)
   }
-  processor.audioContext.removeEventListener('statechange', processor.contextStateHandler)
-
   try {
     processor.workletNode.port.onmessage = null
     processor.workletNode.port.close()
@@ -180,13 +246,8 @@ async function performCleanup(tabId: number): Promise<boolean> {
     }
   }
 
-  try {
-    if (processor.audioContext.state !== 'closed') await processor.audioContext.close()
-  } catch {
-    // The context may have been closed by Chrome.
-  }
-
   applyAllGains()
+  await closeAudioEngineIfIdle()
   notifySubscribers()
   return true
 }
@@ -214,7 +275,7 @@ function handleLufs(tabId: number, lufs: TabLufs): void {
   const processor = session.get(tabId)
   if (!processor) return
 
-  const time = processor.audioContext.currentTime
+  const time = processor.gainNode.context.currentTime
   if (time - processor.lastAutoGainUpdateTime >= AUTO_GAIN_UPDATE_INTERVAL_SECONDS) {
     const gain = session.autoBalance(tabId, settings.autoBalance.targetLufs)
     if (gain) {
@@ -233,8 +294,8 @@ async function startCapture(
 ): Promise<OffscreenResponse> {
   if (session.get(tabId)) return response(false, 'Tab is already being captured')
 
+  pendingCaptureStarts += 1
   let stream: MediaStream | undefined
-  let audioContext: AudioContext | undefined
   let sourceNode: MediaStreamAudioSourceNode | undefined
   let gainNode: GainNode | undefined
   let limiterNode: DynamicsCompressorNode | undefined
@@ -254,32 +315,21 @@ async function startCapture(
     const audioTracks = stream.getAudioTracks()
     if (audioTracks.length === 0) throw new Error('No audio tracks in stream')
 
-    audioContext = new AudioContext()
-    await audioContext.resume()
+    const engine = await getAudioEngine()
+    const audioContext = engine.context
     sourceNode = audioContext.createMediaStreamSource(stream)
     gainNode = audioContext.createGain()
     limiterNode = audioContext.createDynamicsCompressor()
-    applyLimiterSettings(limiterNode, settings.limiter)
 
     sourceNode.connect(gainNode)
-    gainNode.connect(limiterNode)
-    limiterNode.connect(audioContext.destination)
-
-    const [lufsWasmModule] = await Promise.all([
-      loadLufsWasmModule(),
-      audioContext.audioWorklet.addModule(lufsProcessorUrl),
-    ])
     workletNode = new AudioWorkletNode(audioContext, 'lufs-processor', {
       numberOfInputs: 1,
       numberOfOutputs: 1,
       outputChannelCount: [2],
-      processorOptions: { wasmModule: lufsWasmModule },
+      processorOptions: { wasmModule: engine.wasmModule },
     })
 
     const trackEndedHandler = () => void endCapture(tabId, 'Audio track ended')
-    const contextStateHandler = () => {
-      if (audioContext?.state === 'closed') void endCapture(tabId, 'Audio context closed')
-    }
 
     const processor: TabAudioProcessor = {
       tabId,
@@ -293,17 +343,17 @@ async function startCapture(
       },
       gainDb: 0,
       maxGainDb: 0,
-      audioContext,
       sourceNode,
       gainNode,
       limiterNode,
+      limiterEnabled: null,
       workletNode,
       stream,
       trackEndedHandler,
-      contextStateHandler,
       lastAutoGainUpdateTime: 0,
     }
 
+    configureLimiter(processor, settings.limiter)
     session.add(processor)
     workletNode.port.onmessage = (event: MessageEvent<Partial<TabLufs> & { type?: string }>) => {
       if (event.data?.type !== 'lufs') return
@@ -318,7 +368,6 @@ async function startCapture(
     sourceNode.connect(workletNode)
     workletNode.connect(audioContext.destination)
     for (const track of audioTracks) track.addEventListener('ended', trackEndedHandler)
-    audioContext.addEventListener('statechange', contextStateHandler)
     applyEffectiveGain(processor)
     notifySubscribers()
     return response(true)
@@ -336,11 +385,13 @@ async function startCapture(
         // Ignore partial graph cleanup failures.
       }
       stream?.getTracks().forEach((track) => track.stop())
-      if (audioContext && audioContext.state !== 'closed') await audioContext.close()
     }
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error(`Failed to start capture for tab ${tabId}:`, error)
     return response(false, message)
+  } finally {
+    pendingCaptureStarts -= 1
+    await closeAudioEngineIfIdle()
   }
 }
 
