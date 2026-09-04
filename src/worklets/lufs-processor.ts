@@ -1,17 +1,11 @@
+import { createKWeightingCoefficients, type BiquadCoefficients } from '../audio/k-weighting'
+
 /* Global AudioWorklet types (provided by browser at runtime) */
 declare class AudioWorkletProcessor {
   readonly port: MessagePort
   constructor()
 }
 declare function registerProcessor(name: string, processorCtor: new () => unknown): void
-
-// Exact ITU-R BS.1770 K-weighting coefficients (as used in app runtime)
-const HIGH_SHELF_B: [number, number, number] = [
-  1.53512485958697, -2.69169618940638, 1.19839281085285,
-]
-const HIGH_SHELF_A: [number, number, number] = [1.0, -1.69065929318241, 0.73248077421585]
-const HIGH_PASS_B: [number, number, number] = [1.0, -2.0, 1.0]
-const HIGH_PASS_A: [number, number, number] = [1.0, -1.99004745483398, 0.99007225036621]
 
 const CHANNEL_WEIGHTS: number[] = [1.0, 1.0] // Stereo
 
@@ -31,6 +25,8 @@ class LufsProcessor extends AudioWorkletProcessor {
   readonly hopSizeSamples: number
   readonly shortTermBlockCount: number
   readonly updateIntervalSamples: number
+  readonly highShelf: BiquadCoefficients
+  readonly highPass: BiquadCoefficients
 
   // Filter states (typed arrays)
   hs_x1: Float32Array
@@ -54,6 +50,7 @@ class LufsProcessor extends AudioWorkletProcessor {
   blockLoudnesses: number[]
   shortTermBlocks: number[]
   blockCount: number
+  activeChannels: number
 
   constructor() {
     super()
@@ -65,6 +62,9 @@ class LufsProcessor extends AudioWorkletProcessor {
     this.hopSizeSamples = Math.max(1, Math.floor(this.blockSizeSamples * (1 - overlap)))
     this.shortTermBlockCount = Math.ceil(3000 / (blockMs * (1 - overlap)))
     this.updateIntervalSamples = Math.max(128, Math.floor(0.1 * sr)) // ~10 Hz
+    const coefficients = createKWeightingCoefficients(sr)
+    this.highShelf = coefficients.highShelf
+    this.highPass = coefficients.highPass
 
     this.hs_x1 = new Float32Array(this.channels)
     this.hs_x2 = new Float32Array(this.channels)
@@ -88,6 +88,7 @@ class LufsProcessor extends AudioWorkletProcessor {
     this.blockLoudnesses = []
     this.shortTermBlocks = []
     this.blockCount = 0
+    this.activeChannels = 0
 
     // Control messages
     this.port.onmessage = (ev: MessageEvent) => {
@@ -113,15 +114,22 @@ class LufsProcessor extends AudioWorkletProcessor {
     }
 
     const inputL = input[0]
-    const inputR = input[1] ?? input[0] // Fallback to mono if missing right channel
+    const inputR = input[1]
 
     if (!inputL) {
       return true
     }
 
     const left: Float32Array = inputL as Float32Array
-    const right: Float32Array = (inputR ?? inputL) as Float32Array
+    const right = inputR as Float32Array | undefined
     const frameCount = left.length
+    const activeChannels = right ? 2 : 1
+
+    if (this.activeChannels !== 0 && this.activeChannels !== activeChannels) {
+      // A layout change invalidates the accumulated channel-weighted history.
+      this.resetState()
+    }
+    this.activeChannels = activeChannels
 
     // Per-sample filtering and rolling window update
     for (let i = 0; i < frameCount; i++) {
@@ -130,21 +138,21 @@ class LufsProcessor extends AudioWorkletProcessor {
         const ch = 0
         const x = left[i] ?? 0
         const yHs =
-          HIGH_SHELF_B[0] * x +
-          HIGH_SHELF_B[1] * this.hs_x1[ch]! +
-          HIGH_SHELF_B[2] * this.hs_x2[ch]! -
-          HIGH_SHELF_A[1] * this.hs_y1[ch]! -
-          HIGH_SHELF_A[2] * this.hs_y2[ch]!
+          this.highShelf.b[0] * x +
+          this.highShelf.b[1] * this.hs_x1[ch]! +
+          this.highShelf.b[2] * this.hs_x2[ch]! -
+          this.highShelf.a[1] * this.hs_y1[ch]! -
+          this.highShelf.a[2] * this.hs_y2[ch]!
         this.hs_x2[ch] = this.hs_x1[ch]!
         this.hs_x1[ch] = x
         this.hs_y2[ch] = this.hs_y1[ch]!
         this.hs_y1[ch] = yHs
         const yHp =
-          HIGH_PASS_B[0] * yHs +
-          HIGH_PASS_B[1] * this.hp_x1[ch]! +
-          HIGH_PASS_B[2] * this.hp_x2[ch]! -
-          HIGH_PASS_A[1] * this.hp_y1[ch]! -
-          HIGH_PASS_A[2] * this.hp_y2[ch]!
+          this.highPass.b[0] * yHs +
+          this.highPass.b[1] * this.hp_x1[ch]! +
+          this.highPass.b[2] * this.hp_x2[ch]! -
+          this.highPass.a[1] * this.hp_y1[ch]! -
+          this.highPass.a[2] * this.hp_y2[ch]!
         this.hp_x2[ch] = this.hp_x1[ch]!
         this.hp_x1[ch] = yHs
         this.hp_y2[ch] = this.hp_y1[ch]!
@@ -155,26 +163,26 @@ class LufsProcessor extends AudioWorkletProcessor {
         this.sumSquares[ch] = (this.sumSquares[ch] ?? 0) + (y2 - old)
         ringCh[this.ringIndex] = y2
       }
-      // Channel 1 (R)
-      {
+      // Channel 1 (R), when the source is actually stereo.
+      if (right) {
         const ch = 1
         const x = right[i] ?? 0
         const yHs =
-          HIGH_SHELF_B[0] * x +
-          HIGH_SHELF_B[1] * this.hs_x1[ch]! +
-          HIGH_SHELF_B[2] * this.hs_x2[ch]! -
-          HIGH_SHELF_A[1] * this.hs_y1[ch]! -
-          HIGH_SHELF_A[2] * this.hs_y2[ch]!
+          this.highShelf.b[0] * x +
+          this.highShelf.b[1] * this.hs_x1[ch]! +
+          this.highShelf.b[2] * this.hs_x2[ch]! -
+          this.highShelf.a[1] * this.hs_y1[ch]! -
+          this.highShelf.a[2] * this.hs_y2[ch]!
         this.hs_x2[ch] = this.hs_x1[ch]!
         this.hs_x1[ch] = x
         this.hs_y2[ch] = this.hs_y1[ch]!
         this.hs_y1[ch] = yHs
         const yHp =
-          HIGH_PASS_B[0] * yHs +
-          HIGH_PASS_B[1] * this.hp_x1[ch]! +
-          HIGH_PASS_B[2] * this.hp_x2[ch]! -
-          HIGH_PASS_A[1] * this.hp_y1[ch]! -
-          HIGH_PASS_A[2] * this.hp_y2[ch]!
+          this.highPass.b[0] * yHs +
+          this.highPass.b[1] * this.hp_x1[ch]! +
+          this.highPass.b[2] * this.hp_x2[ch]! -
+          this.highPass.a[1] * this.hp_y1[ch]! -
+          this.highPass.a[2] * this.hp_y2[ch]!
         this.hp_x2[ch] = this.hp_x1[ch]!
         this.hp_x1[ch] = yHs
         this.hp_y2[ch] = this.hp_y1[ch]!
@@ -208,12 +216,12 @@ class LufsProcessor extends AudioWorkletProcessor {
           if (this.blockLoudnesses.length > MAX_INTEGRATED_BLOCKS) {
             this.blockLoudnesses.shift()
           }
+          this.blockCount++
         }
         this.shortTermBlocks.push(blockLufs)
         if (this.shortTermBlocks.length > this.shortTermBlockCount) {
           this.shortTermBlocks.shift()
         }
-        this.blockCount++
       }
 
       // Emit ~10 Hz aggregated results
@@ -248,7 +256,7 @@ class LufsProcessor extends AudioWorkletProcessor {
 
   private computeCurrentBlockLufs(): number {
     let sumWeighted = 0
-    for (let ch = 0; ch < this.channels; ch++) {
+    for (let ch = 0; ch < this.activeChannels; ch++) {
       const channelSum = this.sumSquares[ch] ?? 0
       const meanSquare = channelSum / this.blockSizeSamples
       const weight = CHANNEL_WEIGHTS[ch] ?? 1.0

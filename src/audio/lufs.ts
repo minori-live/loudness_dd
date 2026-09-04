@@ -1,18 +1,13 @@
+import {
+  createKWeightingCoefficients,
+  type BiquadCoefficients,
+  type KWeightingCoefficients,
+} from './k-weighting'
+
 /**
  * LUFS (Loudness Units Full Scale) calculation module
  * Implements ITU-R BS.1770-5 algorithm for integrated loudness measurement
  */
-
-// K-weighting filter coefficients for 48kHz sample rate
-// Stage 1: High-shelf filter (+4dB at high frequencies)
-const HIGH_SHELF_B: [number, number, number] = [
-  1.53512485958697, -2.69169618940638, 1.19839281085285,
-]
-const HIGH_SHELF_A: [number, number, number] = [1.0, -1.69065929318241, 0.73248077421585]
-
-// Stage 2: High-pass filter (removes DC and sub-bass)
-const HIGH_PASS_B: [number, number, number] = [1.0, -2.0, 1.0]
-const HIGH_PASS_A: [number, number, number] = [1.0, -1.99004745483398, 0.99007225036621]
 
 // Channel weights for surround (stereo uses only L/R at 1.0)
 const CHANNEL_WEIGHTS: Record<number, number[]> = {
@@ -55,6 +50,7 @@ export class LufsCalculator {
   private blockSizeSamples: number
   private hopSizeSamples: number
   private channelWeights: number[]
+  private coefficients: KWeightingCoefficients
 
   // Filter states per channel (two stages)
   private highShelfStates: FilterState[]
@@ -80,6 +76,7 @@ export class LufsCalculator {
     this.blockSizeSamples = Math.floor((blockMs / 1000) * this.sampleRate)
     this.hopSizeSamples = Math.floor(this.blockSizeSamples * (1 - overlap))
     this.shortTermBlockCount = Math.ceil(3000 / (blockMs * (1 - overlap)))
+    this.coefficients = createKWeightingCoefficients(this.sampleRate)
 
     this.channelWeights =
       CHANNEL_WEIGHTS[this.channels] ?? (Array(this.channels).fill(1.0) as number[])
@@ -109,12 +106,8 @@ export class LufsCalculator {
   /**
    * Apply biquad filter to a sample
    */
-  private applyBiquad(
-    x: number,
-    b: [number, number, number],
-    a: [number, number, number],
-    state: FilterState,
-  ): number {
+  private applyBiquad(x: number, coefficients: BiquadCoefficients, state: FilterState): number {
+    const { b, a } = coefficients
     const y = b[0] * x + b[1] * state.x1 + b[2] * state.x2 - a[1] * state.y1 - a[2] * state.y2
 
     state.x2 = state.x1
@@ -142,8 +135,8 @@ export class LufsCalculator {
         if (!highShelfState || !highPassState || !channelBuffer) continue
 
         // Apply K-weighting (high-shelf then high-pass)
-        const afterHighShelf = this.applyBiquad(sample, HIGH_SHELF_B, HIGH_SHELF_A, highShelfState)
-        const filtered = this.applyBiquad(afterHighShelf, HIGH_PASS_B, HIGH_PASS_A, highPassState)
+        const afterHighShelf = this.applyBiquad(sample, this.coefficients.highShelf, highShelfState)
+        const filtered = this.applyBiquad(afterHighShelf, this.coefficients.highPass, highPassState)
 
         channelBuffer[this.bufferIndex] = filtered
       }

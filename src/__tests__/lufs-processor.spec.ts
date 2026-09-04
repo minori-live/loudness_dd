@@ -205,7 +205,7 @@ function setupWorklet() {
 async function loadProcessorCtor() {
   vi.resetModules()
   const { postedMessages } = setupWorklet()
-  ;(globalThis as unknown as { sampleRate?: number }).sampleRate = 1000
+  ;(globalThis as unknown as { sampleRate?: number }).sampleRate = 8000
   await import('../../src/worklets/lufs-processor.ts')
   const g = globalThis as Record<string, unknown>
   const w = g.__Worklet as { name: string; ctor: LufsWorkletCtor } | undefined
@@ -217,6 +217,20 @@ function makeFrames(length: number, stereo = true) {
   const left = Float32Array.from({ length }, (_, i) => i)
   const right = stereo ? Float32Array.from({ length }, (_, i) => i + 10) : undefined
   return { left, right }
+}
+
+function makeSineFrames(length: number, stereo = true) {
+  const sampleRate = 8000
+  const left = Float32Array.from(
+    { length },
+    (_, frame) => Math.sin((2 * Math.PI * 1000 * frame) / sampleRate) * 0.1,
+  )
+  const right = stereo ? left.slice() : undefined
+  return { left, right }
+}
+
+function lastMessage(messages: LufsMessage[]): LufsMessage | undefined {
+  return messages[messages.length - 1]
 }
 
 describe('lufs-processor AudioWorklet', () => {
@@ -234,9 +248,9 @@ describe('lufs-processor AudioWorklet', () => {
     const { ctor, postedMessages } = await loadProcessorCtor()
     const proc = new ctor()
 
-    // 200 frames at sampleRate=1000 exceeds updateIntervalSamples (~100)
-    const { left, right } = makeFrames(200, true)
-    const outputs = [[new Float32Array(200), new Float32Array(200)]]
+    // 1000 frames at sampleRate=8000 exceeds updateIntervalSamples (~800)
+    const { left, right } = makeFrames(1000, true)
+    const outputs = [[new Float32Array(1000), new Float32Array(1000)]]
     const keepAlive = proc.process([[left, right]], outputs)
     expect(keepAlive).toBe(true)
 
@@ -252,8 +266,8 @@ describe('lufs-processor AudioWorklet', () => {
   it('handles stereo input and emits LUFS without errors', async () => {
     const { ctor, postedMessages } = await loadProcessorCtor()
     const proc = new ctor()
-    const { left, right } = makeFrames(200, true)
-    const outputs = [[new Float32Array(200), new Float32Array(200)]]
+    const { left, right } = makeFrames(1000, true)
+    const outputs = [[new Float32Array(1000), new Float32Array(1000)]]
     proc.process([[left, right]], outputs)
     expect(postedMessages.length).toBeGreaterThanOrEqual(1)
     const msg = postedMessages[0]!
@@ -276,12 +290,45 @@ describe('lufs-processor AudioWorklet', () => {
   it('falls back to mono when right channel is missing and still posts LUFS', async () => {
     const { ctor, postedMessages } = await loadProcessorCtor()
     const proc = new ctor()
-    const { left } = makeFrames(200, false)
-    const outputs = [[new Float32Array(200), new Float32Array(200)]]
+    const { left } = makeFrames(1000, false)
+    const outputs = [[new Float32Array(1000), new Float32Array(1000)]]
     proc.process([[left]], outputs)
     expect(postedMessages.length).toBeGreaterThanOrEqual(1)
     const msg = postedMessages[0]!
     expect(msg.type).toBe('lufs')
+  })
+
+  it('does not count blocks below the absolute gate', async () => {
+    const { ctor, postedMessages } = await loadProcessorCtor()
+    const proc = new ctor()
+    const silence = new Float32Array(4000)
+
+    proc.process([[silence]], [[new Float32Array(4000), new Float32Array(4000)]])
+
+    expect(lastMessage(postedMessages)?.blockCount).toBe(0)
+  })
+
+  it('measures mono once instead of duplicating it as stereo', async () => {
+    const { ctor, postedMessages } = await loadProcessorCtor()
+    const monoProcessor = new ctor()
+    const mono = makeSineFrames(4000, false)
+    monoProcessor.process(
+      [[mono.left]],
+      [[new Float32Array(mono.left.length), new Float32Array(mono.left.length)]],
+    )
+    const monoMomentary = lastMessage(postedMessages)?.momentary ?? -Infinity
+
+    postedMessages.length = 0
+    const stereoProcessor = new ctor()
+    const stereo = makeSineFrames(4000, true)
+    stereoProcessor.process(
+      [[stereo.left, stereo.right]],
+      [[new Float32Array(stereo.left.length), new Float32Array(stereo.left.length)]],
+    )
+    const stereoMomentary = lastMessage(postedMessages)?.momentary ?? -Infinity
+
+    expect(Number.isFinite(monoMomentary)).toBe(true)
+    expect(stereoMomentary - monoMomentary).toBeCloseTo(10 * Math.log10(2), 2)
   })
 
   it('outputs silence (zeros) to avoid double audio', async () => {
