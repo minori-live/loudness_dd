@@ -338,14 +338,14 @@ describe('lufs-processor AudioWorklet', () => {
     expect(stereoMomentary - monoMomentary).toBeCloseTo(10 * Math.log10(2), 2)
   })
 
-  it('outputs silence (zeros) to avoid double audio', async () => {
+  it('leaves the zero-initialized silent output untouched', async () => {
     const { create } = await loadProcessorCtor()
     const proc = create()
 
     const left = Float32Array.from([0.1, -0.2, 0.3, -0.4])
     const right = Float32Array.from([0.5, -0.6, 0.7, -0.8])
-    const outL = new Float32Array(4).fill(123)
-    const outR = new Float32Array(4).fill(456)
+    const outL = new Float32Array(4)
+    const outR = new Float32Array(4)
     const outputs = [[outL, outR]]
 
     proc.process([[left, right]], outputs)

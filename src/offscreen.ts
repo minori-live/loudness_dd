@@ -54,11 +54,15 @@ let pendingCaptureStarts = 0
 
 function loadLufsWasmModule(): Promise<WebAssembly.Module> {
   lufsWasmModulePromise ??= fetch(lufsWasmUrl)
-    .then((response) => {
+    .then(async (response) => {
       if (!response.ok) throw new Error(`Unable to load LUFS WebAssembly (${response.status})`)
-      return response.arrayBuffer()
+      const fallbackResponse = response.clone()
+      try {
+        return await WebAssembly.compileStreaming(response)
+      } catch {
+        return WebAssembly.compile(await fallbackResponse.arrayBuffer())
+      }
     })
-    .then((bytes) => WebAssembly.compile(bytes))
     .catch((error: unknown) => {
       lufsWasmModulePromise = undefined
       throw error
@@ -302,20 +306,23 @@ async function startCapture(
   let workletNode: AudioWorkletNode | undefined
 
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        mandatory: {
-          chromeMediaSource: 'tab',
-          chromeMediaSourceId: streamId,
-        },
-      } as MediaTrackConstraints,
-      video: false,
-    })
+    const [captureStream, engine] = await Promise.all([
+      navigator.mediaDevices.getUserMedia({
+        audio: {
+          mandatory: {
+            chromeMediaSource: 'tab',
+            chromeMediaSourceId: streamId,
+          },
+        } as MediaTrackConstraints,
+        video: false,
+      }),
+      getAudioEngine(),
+    ])
+    stream = captureStream
 
     const audioTracks = stream.getAudioTracks()
     if (audioTracks.length === 0) throw new Error('No audio tracks in stream')
 
-    const engine = await getAudioEngine()
     const audioContext = engine.context
     sourceNode = audioContext.createMediaStreamSource(stream)
     gainNode = audioContext.createGain()
@@ -325,7 +332,7 @@ async function startCapture(
     workletNode = new AudioWorkletNode(audioContext, 'lufs-processor', {
       numberOfInputs: 1,
       numberOfOutputs: 1,
-      outputChannelCount: [2],
+      outputChannelCount: [1],
       processorOptions: { wasmModule: engine.wasmModule },
     })
 

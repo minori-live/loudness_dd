@@ -48,6 +48,7 @@ struct LufsMeter {
     active_channels: usize,
     input_left: [f32; INPUT_CAPACITY],
     input_right: [f32; INPUT_CAPACITY],
+    measurements: [f64; 4],
 }
 
 impl LufsMeter {
@@ -92,6 +93,7 @@ impl LufsMeter {
             active_channels: 0,
             input_left: [0.0; INPUT_CAPACITY],
             input_right: [0.0; INPUT_CAPACITY],
+            measurements: [f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY, 0.0],
         })
     }
 
@@ -137,6 +139,14 @@ impl LufsMeter {
             }
         }
 
+        if should_emit {
+            self.measurements = [
+                self.momentary(),
+                self.short_term(),
+                self.integrated(),
+                f64::from(self.block_count),
+            ];
+        }
         should_emit
     }
 
@@ -268,6 +278,7 @@ impl LufsMeter {
         self.short_term_length = 0;
         self.short_term_index = 0;
         self.block_count = 0;
+        self.measurements = [f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY, 0.0];
     }
 }
 
@@ -354,6 +365,15 @@ pub unsafe extern "C" fn lufs_input_right_ptr(handle: *mut c_void) -> *mut f32 {
     unsafe { handle.cast::<LufsMeter>().as_mut() }
         .map(|meter| meter.input_right.as_mut_ptr())
         .unwrap_or(ptr::null_mut())
+}
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `handle` must be a live pointer returned by `lufs_create`.
+pub unsafe extern "C" fn lufs_measurements_ptr(handle: *const c_void) -> *const f64 {
+    unsafe { handle.cast::<LufsMeter>().as_ref() }
+        .map(|meter| meter.measurements.as_ptr())
+        .unwrap_or(ptr::null())
 }
 
 #[unsafe(no_mangle)]

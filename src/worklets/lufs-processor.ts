@@ -15,11 +15,8 @@ interface LufsWasmExports extends WebAssembly.Exports {
   lufs_input_capacity: () => number
   lufs_input_left_ptr: (handle: number) => number
   lufs_input_right_ptr: (handle: number) => number
+  lufs_measurements_ptr: (handle: number) => number
   lufs_process: (handle: number, frameCount: number, activeChannels: number) => number
-  lufs_momentary: (handle: number) => number
-  lufs_short_term: (handle: number) => number
-  lufs_integrated: (handle: number) => number
-  lufs_block_count: (handle: number) => number
   lufs_reset: (handle: number) => void
 }
 
@@ -40,6 +37,7 @@ class LufsProcessor extends AudioWorkletProcessor {
   private readonly inputCapacity: number
   private readonly inputLeft: Float32Array
   private readonly inputRight: Float32Array
+  private readonly measurements: Float64Array
 
   constructor(options?: LufsProcessorOptions) {
     super()
@@ -55,12 +53,19 @@ class LufsProcessor extends AudioWorkletProcessor {
     this.inputCapacity = this.wasm.lufs_input_capacity()
     const leftPointer = this.wasm.lufs_input_left_ptr(this.meterHandle)
     const rightPointer = this.wasm.lufs_input_right_ptr(this.meterHandle)
-    if (this.inputCapacity <= 0 || leftPointer === 0 || rightPointer === 0) {
+    const measurementsPointer = this.wasm.lufs_measurements_ptr(this.meterHandle)
+    if (
+      this.inputCapacity <= 0 ||
+      leftPointer === 0 ||
+      rightPointer === 0 ||
+      measurementsPointer === 0
+    ) {
       throw new Error('LUFS WebAssembly input buffers are unavailable')
     }
 
     this.inputLeft = new Float32Array(this.wasm.memory.buffer, leftPointer, this.inputCapacity)
     this.inputRight = new Float32Array(this.wasm.memory.buffer, rightPointer, this.inputCapacity)
+    this.measurements = new Float64Array(this.wasm.memory.buffer, measurementsPointer, 4)
 
     this.port.onmessage = (event: MessageEvent) => {
       const data = event.data
@@ -72,7 +77,7 @@ class LufsProcessor extends AudioWorkletProcessor {
 
   process(
     inputs: ReadonlyArray<ReadonlyArray<Float32Array | undefined>>,
-    outputs: ReadonlyArray<ReadonlyArray<Float32Array>>,
+    _outputs: ReadonlyArray<ReadonlyArray<Float32Array>>,
   ): boolean {
     const input = inputs[0]
     const left = input?.[0]
@@ -88,13 +93,6 @@ class LufsProcessor extends AudioWorkletProcessor {
       if (this.wasm.lufs_process(this.meterHandle, chunkLength, activeChannels) !== 0) {
         this.postMeasurements()
       }
-    }
-
-    // AudioWorklet output buffers are zero-initialized, but explicitly preserve
-    // the analyzer's silence-only contract for browser and test implementations.
-    const output = outputs[0]
-    if (output) {
-      for (const outputChannel of output) outputChannel.fill(0)
     }
 
     return true
@@ -116,10 +114,10 @@ class LufsProcessor extends AudioWorkletProcessor {
   private postMeasurements(): void {
     this.port.postMessage({
       type: 'lufs',
-      momentary: this.wasm.lufs_momentary(this.meterHandle),
-      shortTerm: this.wasm.lufs_short_term(this.meterHandle),
-      integrated: this.wasm.lufs_integrated(this.meterHandle),
-      blockCount: this.wasm.lufs_block_count(this.meterHandle),
+      momentary: this.measurements[0],
+      shortTerm: this.measurements[1],
+      integrated: this.measurements[2],
+      blockCount: this.measurements[3],
     })
   }
 }
