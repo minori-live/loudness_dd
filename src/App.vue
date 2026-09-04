@@ -31,7 +31,7 @@ function handleClearError(): void {
 }
 
 onMounted(() => {
-  tabsStore.startPolling()
+  void tabsStore.startSync()
 
   // get current locale
   const currentLocale = locale.value
@@ -58,7 +58,7 @@ watch(
 )
 
 onUnmounted(() => {
-  tabsStore.stopPolling()
+  tabsStore.stopSync()
 })
 </script>
 

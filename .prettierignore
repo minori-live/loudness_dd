@@ -1,3 +1,9 @@
 # Generated dependency lockfiles are formatted by their owning tools.
+apm.lock.yaml
 mise.lock
 pnpm-lock.yaml
+
+# APM-managed packages and generated skill installations.
+.agents/
+apm.yml
+apm_modules/

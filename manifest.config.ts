@@ -2,6 +2,7 @@ import { defineManifest } from '@crxjs/vite-plugin'
 
 export default defineManifest({
   manifest_version: 3,
+  minimum_chrome_version: '116',
   name: 'Loudness DD',
   description: 'LUFS-based tab volume balancer for Chrome',
   version: process.env.npm_package_version ?? '0.0.0',

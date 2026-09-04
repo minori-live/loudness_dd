@@ -19,8 +19,8 @@ vi.mock('@/stores/tabs', () => {
       // actions used by App.vue
       registerCurrentTab: vi.fn(async () => {}),
       clearError: vi.fn(() => {}),
-      startPolling: vi.fn(() => {}),
-      stopPolling: vi.fn(() => {}),
+      startSync: vi.fn(async () => {}),
+      stopSync: vi.fn(() => {}),
       // actions used by TabList.vue
       setGain: vi.fn(async () => {}),
       setMaxGain: vi.fn(async () => {}),

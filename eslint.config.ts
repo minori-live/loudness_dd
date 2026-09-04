@@ -28,7 +28,7 @@ const config = defineConfigWithVueTs(
 )
 
 export default [
-  globalIgnores(['.pnpm-store', '.vite', 'node_modules', 'dist', 'release']),
+  globalIgnores(['.pnpm-store', '.vite', 'apm_modules', 'node_modules', 'dist', 'release']),
   {
     languageOptions: {
       parserOptions: {
