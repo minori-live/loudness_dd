@@ -59,6 +59,7 @@ describe('tabs store session sync', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -190,6 +191,46 @@ describe('tabs store session sync', () => {
       type: 'SET_AUTO_FOCUS_ENABLED',
       enabled: true,
     })
+  })
+
+  it('throttles hot control previews while updating local state immediately', async () => {
+    vi.useFakeTimers()
+    const sendMessage = vi.fn(async () => ({ success: true, state: extensionState(-20) }))
+    vi.stubGlobal('chrome', { runtime: { sendMessage } })
+
+    const store = useTabsStore()
+    await store.fetchState()
+    store.previewGain(1, -1)
+    store.previewGain(1, -3)
+    store.previewTargetLufs(-18)
+    store.previewLimiter({ thresholdDb: -2 })
+
+    expect(store.tabs[0]?.gainDb).toBe(-3)
+    expect(store.targetLufs).toBe(-18)
+    expect(store.limiterThreshold).toBe(-2)
+    expect(sendMessage).toHaveBeenCalledOnce()
+
+    await vi.advanceTimersByTimeAsync(50)
+
+    expect(sendMessage).toHaveBeenCalledTimes(4)
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'SET_GAIN_REQUEST',
+      tabId: 1,
+      gainDb: -3,
+    })
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'SET_TARGET_LUFS',
+      targetLufs: -18,
+      persist: false,
+    })
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'SET_LIMITER_SETTINGS',
+      settings: expect.objectContaining({ thresholdDb: -2 }),
+      persist: false,
+    })
+
+    await store.setTargetLufs(-18)
+    expect(sendMessage).toHaveBeenLastCalledWith({ type: 'SET_TARGET_LUFS', targetLufs: -18 })
   })
 
   it('handles an unresponsive stale background without throwing', async () => {

@@ -36,6 +36,7 @@ const valueClass = computed(
 
 const emit = defineEmits<{
   input: [value: number]
+  change: [value: number]
 }>()
 </script>
 
@@ -55,6 +56,7 @@ const emit = defineEmits<{
         :tone="tone"
         :disabled="disabled"
         @input="emit('input', $event)"
+        @change="emit('change', $event)"
       />
       <span class="ui-slider-label">{{ max }}</span>
     </div>

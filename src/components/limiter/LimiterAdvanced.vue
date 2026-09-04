@@ -14,9 +14,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   ratio: [value: number]
+  ratioPreview: [value: number]
   attack: [value: number]
+  attackPreview: [value: number]
   release: [value: number]
+  releasePreview: [value: number]
   knee: [value: number]
+  kneePreview: [value: number]
 }>()
 
 const { t } = useI18n()
@@ -51,7 +55,8 @@ const kneeHint = computed(() => {
       :step="1"
       :disabled="!enabled"
       tone="violet"
-      @input="emit('ratio', $event)"
+      @input="emit('ratioPreview', $event)"
+      @change="emit('ratio', $event)"
     />
     <LimiterParameter
       :label="t('limiter.attack')"
@@ -63,7 +68,8 @@ const kneeHint = computed(() => {
       :disabled="!enabled"
       tone="success"
       :hint="attackHint"
-      @input="emit('attack', $event)"
+      @input="emit('attackPreview', $event)"
+      @change="emit('attack', $event)"
     />
     <LimiterParameter
       :label="t('limiter.release')"
@@ -75,7 +81,8 @@ const kneeHint = computed(() => {
       :disabled="!enabled"
       tone="warning"
       :hint="releaseHint"
-      @input="emit('release', $event)"
+      @input="emit('releasePreview', $event)"
+      @change="emit('release', $event)"
     />
     <LimiterParameter
       :label="t('limiter.knee')"
@@ -87,7 +94,8 @@ const kneeHint = computed(() => {
       :disabled="!enabled"
       tone="teal"
       :hint="kneeHint"
-      @input="emit('knee', $event)"
+      @input="emit('kneePreview', $event)"
+      @change="emit('knee', $event)"
     />
   </div>
 </template>

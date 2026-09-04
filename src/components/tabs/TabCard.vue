@@ -21,6 +21,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   gain: [tabId: number, value: number]
+  gainPreview: [tabId: number, value: number]
   maxGain: [tabId: number, value: number]
   remove: [tabId: number]
   reset: [tabId: number]
@@ -129,7 +130,8 @@ function hideBrokenImage(event: Event): void {
             :step="0.5"
             :compact="collapsed"
             tone="success"
-            @input="emit('gain', tab.tabId, $event)"
+            @input="emit('gainPreview', tab.tabId, $event)"
+            @change="emit('gain', tab.tabId, $event)"
           />
           <span v-if="!collapsed" class="ui-slider-label">{{ formatGain(tab.maxGainDb) }}</span>
         </div>

@@ -19,6 +19,10 @@ function formatLufs(lufs: number): string {
   return lufs.toFixed(1)
 }
 
+function handleTargetPreview(value: number): void {
+  tabsStore.previewTargetLufs(value)
+}
+
 async function handleTargetChange(value: number): Promise<void> {
   await tabsStore.setTargetLufs(value)
 }
@@ -59,7 +63,8 @@ async function applyPreset(value: number): Promise<void> {
           step="1"
           :value="targetLufs"
           tone="target"
-          @input="handleTargetChange"
+          @input="handleTargetPreview"
+          @change="handleTargetChange"
         />
         <span class="ui-slider-label">0</span>
       </div>

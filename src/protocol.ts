@@ -110,8 +110,8 @@ export type BackgroundRequest =
   | { type: 'TOGGLE_FOCUS'; tabId: number }
   | { type: 'CLEAR_FOCUS' }
   | { type: 'SET_AUTO_FOCUS_ENABLED'; enabled: boolean }
-  | { type: 'SET_TARGET_LUFS'; targetLufs: number }
-  | { type: 'SET_LIMITER_SETTINGS'; settings: Partial<LimiterSettings> }
+  | { type: 'SET_TARGET_LUFS'; targetLufs: number; persist?: boolean }
+  | { type: 'SET_LIMITER_SETTINGS'; settings: Partial<LimiterSettings>; persist?: boolean }
   | { type: 'RESET_LUFS_REQUEST'; tabId: number }
 
 export type OffscreenRequest =

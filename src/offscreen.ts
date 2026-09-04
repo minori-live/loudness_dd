@@ -128,13 +128,18 @@ function applyAllGains(): void {
 }
 
 function syncSettings(nextSettings: PersistedSettings): void {
+  const limiterChanged = Object.entries(nextSettings.limiter).some(
+    ([key, value]) => settings.limiter[key as keyof LimiterSettings] !== value,
+  )
   settings = {
     autoBalance: { ...nextSettings.autoBalance },
     autoFocus: { ...nextSettings.autoFocus },
     limiter: { ...nextSettings.limiter },
   }
-  for (const processor of session.values()) {
-    applyLimiterSettings(processor.limiterNode, settings.limiter)
+  if (limiterChanged) {
+    for (const processor of session.values()) {
+      applyLimiterSettings(processor.limiterNode, settings.limiter)
+    }
   }
 }
 

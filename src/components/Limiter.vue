@@ -55,7 +55,8 @@ const ratio = computed(() => tabsStore.limiterRatio)
         :step="0.1"
         :disabled="!isEnabled"
         tone="focus"
-        @input="tabsStore.setLimiterThreshold($event)"
+        @input="tabsStore.previewLimiter({ thresholdDb: $event })"
+        @change="tabsStore.setLimiterThreshold($event)"
       />
 
       <UiButton
@@ -76,9 +77,13 @@ const ratio = computed(() => tabsStore.limiterRatio)
           :attack="attack"
           :release="release"
           :knee="knee"
+          @ratio-preview="tabsStore.previewLimiter({ ratio: $event })"
           @ratio="tabsStore.setLimiterRatio($event)"
+          @attack-preview="tabsStore.previewLimiter({ attackMs: $event })"
           @attack="tabsStore.setLimiterAttack($event)"
+          @release-preview="tabsStore.previewLimiter({ releaseMs: $event })"
           @release="tabsStore.setLimiterRelease($event)"
+          @knee-preview="tabsStore.previewLimiter({ kneeDb: $event })"
           @knee="tabsStore.setLimiterKnee($event)"
         />
       </Transition>

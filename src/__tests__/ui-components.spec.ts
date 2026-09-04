@@ -41,6 +41,7 @@ describe('UI primitives', () => {
     await input.setValue('-18')
 
     expect(wrapper.emitted('input')).toEqual([[-18]])
+    expect(wrapper.emitted('change')).toEqual([[-18]])
   })
 
   it('renders cards with the requested semantic element', () => {

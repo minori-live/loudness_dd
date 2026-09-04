@@ -160,8 +160,10 @@ async function runSessionCommand(message: OffscreenRequest): Promise<CommandResp
     }
   }
 
-  await updateBadge(result.session.tabs.length)
-  if (message.type === 'STOP_CAPTURE') await closeOffscreenIfIdle(result.session.tabs.length)
+  if (message.type === 'STOP_CAPTURE') {
+    await updateBadge(result.session.tabs.length)
+    await closeOffscreenIfIdle(result.session.tabs.length)
+  }
   return {
     success: result.success,
     state: toExtensionState(result.session, settings),
@@ -179,8 +181,19 @@ async function applySettingsUpdate(
     settings,
   })
   const session = result?.session ?? emptySession()
-  await updateBadge(session.tabs.length)
   return { success: true, state: toExtensionState(session, settings) }
+}
+
+async function applySettingsPreview(
+  transform: (current: PersistedSettings) => PersistedSettings,
+): Promise<CommandResponse> {
+  const settings = transform(await getSettings())
+  await sendToExistingOffscreen({
+    type: 'SYNC_SETTINGS',
+    target: OFFSCREEN_TARGET,
+    settings,
+  })
+  return { success: true }
 }
 
 async function handleRequest(message: BackgroundRequest): Promise<CommandResponse> {
@@ -236,7 +249,7 @@ async function handleRequest(message: BackgroundRequest): Promise<CommandRespons
       return session ? { success: true, state: toExtensionState(session, settings) } : result
     }
     case 'SET_TARGET_LUFS':
-      return applySettingsUpdate((current) =>
+      return (message.persist === false ? applySettingsPreview : applySettingsUpdate)((current) =>
         normalizeSettings(
           { ...current.autoBalance, targetLufs: message.targetLufs },
           current.limiter,
@@ -244,7 +257,7 @@ async function handleRequest(message: BackgroundRequest): Promise<CommandRespons
         ),
       )
     case 'SET_LIMITER_SETTINGS':
-      return applySettingsUpdate((current) =>
+      return (message.persist === false ? applySettingsPreview : applySettingsUpdate)((current) =>
         normalizeSettings(
           current.autoBalance,
           { ...current.limiter, ...message.settings },

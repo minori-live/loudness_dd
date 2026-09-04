@@ -40,6 +40,7 @@ const focusTabId = computed(() => tabsStore.focusTabId)
         :muted="tabsStore.hasSolo && soloTabId !== tab.tabId"
         :focused="focusTabId === tab.tabId"
         :ducked="tabsStore.hasFocus && focusTabId !== tab.tabId"
+        @gain-preview="tabsStore.previewGain"
         @gain="tabsStore.setGain"
         @max-gain="tabsStore.setMaxGain"
         @remove="tabsStore.unregisterTab"

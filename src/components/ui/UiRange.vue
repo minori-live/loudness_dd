@@ -17,6 +17,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   input: [value: number]
+  change: [value: number]
 }>()
 
 const toneClass = computed(
@@ -34,6 +35,10 @@ const toneClass = computed(
 function handleInput(event: Event): void {
   emit('input', Number((event.target as HTMLInputElement).value))
 }
+
+function handleChange(event: Event): void {
+  emit('change', Number((event.target as HTMLInputElement).value))
+}
 </script>
 
 <template>
@@ -44,6 +49,7 @@ function handleInput(event: Event): void {
     :class="[toneClass, compact ? 'h-1' : 'h-2']"
     :value="value"
     @input="handleInput"
+    @change="handleChange"
   />
 </template>
 

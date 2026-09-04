@@ -6,6 +6,7 @@ import {
   DEFAULT_AUTO_FOCUS_SETTINGS,
   DEFAULT_LIMITER_SETTINGS,
   MIN_BLOCKS_FOR_RELIABLE_LUFS,
+  MIN_GAIN_DB,
   SESSION_PORT_NAME,
   type AutoBalanceSettings,
   type AutoFocusSettings,
@@ -30,6 +31,14 @@ interface BrowserTabPosition {
   windowId: number
   index: number
 }
+
+interface PendingCommand {
+  message: BackgroundRequest
+  fallback: string
+  timer: ReturnType<typeof setTimeout>
+}
+
+const HOT_UPDATE_INTERVAL_MS = 50
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
@@ -70,6 +79,7 @@ export const useTabsStore = defineStore('tabs', () => {
   let syncActive = false
   let tabOrderSyncActive = false
   let tabOrderQueryRevision = 0
+  const pendingCommands = new Map<string, PendingCommand>()
 
   const capturedTabIds = computed(() => tabs.value.map((tab) => tab.tabId))
   const orderedTabs = computed(() => {
@@ -150,6 +160,37 @@ export const useTabsStore = defineStore('tabs', () => {
     limiterSettings.value = state.limiterSettings
   }
 
+  function scheduleCommand(key: string, message: BackgroundRequest, fallback: string): void {
+    const pending = pendingCommands.get(key)
+    if (pending) {
+      pending.message = message
+      pending.fallback = fallback
+      return
+    }
+
+    const entry: PendingCommand = {
+      message,
+      fallback,
+      timer: setTimeout(() => {
+        pendingCommands.delete(key)
+        void sendCommand(entry.message, entry.fallback, false)
+      }, HOT_UPDATE_INTERVAL_MS),
+    }
+    pendingCommands.set(key, entry)
+  }
+
+  function cancelScheduledCommand(key: string): void {
+    const pending = pendingCommands.get(key)
+    if (!pending) return
+    clearTimeout(pending.timer)
+    pendingCommands.delete(key)
+  }
+
+  function cancelAllScheduledCommands(): void {
+    for (const pending of pendingCommands.values()) clearTimeout(pending.timer)
+    pendingCommands.clear()
+  }
+
   function disconnectSessionPort(): void {
     if (!sessionPort) return
     sessionPort.disconnect()
@@ -219,14 +260,18 @@ export const useTabsStore = defineStore('tabs', () => {
     browserTabPositions.value = new Map()
   }
 
-  async function sendCommand(message: BackgroundRequest, fallback: string): Promise<boolean> {
+  async function sendCommand(
+    message: BackgroundRequest,
+    fallback: string,
+    applyResponseState = true,
+  ): Promise<boolean> {
     try {
       const result: unknown = await chrome.runtime.sendMessage(message)
       if (!isCommandResponse(result)) {
         error.value = `${fallback}: background did not respond; reload the extension`
         return false
       }
-      if (result.state) applyState(result.state)
+      if (applyResponseState && result.state) applyState(result.state)
       if (!result.success) error.value = result.error || fallback
       return result.success
     } catch (cause) {
@@ -291,7 +336,27 @@ export const useTabsStore = defineStore('tabs', () => {
     })
   }
 
+  function updateLocalGain(tabId: number, gainDb: number): void {
+    const tab = tabs.value.find((candidate) => candidate.tabId === tabId)
+    if (!tab) return
+    const nextGain = Math.max(MIN_GAIN_DB, Math.min(tab.maxGainDb, gainDb))
+    tabs.value = tabs.value.map((candidate) =>
+      candidate.tabId === tabId ? { ...candidate, gainDb: nextGain } : candidate,
+    )
+  }
+
+  function previewGain(tabId: number, gainDb: number): void {
+    updateLocalGain(tabId, gainDb)
+    scheduleCommand(
+      `gain:${tabId}`,
+      { type: 'SET_GAIN_REQUEST', tabId, gainDb },
+      'Failed to preview gain',
+    )
+  }
+
   function setGain(tabId: number, gainDb: number): Promise<boolean> {
+    cancelScheduledCommand(`gain:${tabId}`)
+    updateLocalGain(tabId, gainDb)
     return sendCommand({ type: 'SET_GAIN_REQUEST', tabId, gainDb }, 'Failed to set gain')
   }
 
@@ -319,11 +384,33 @@ export const useTabsStore = defineStore('tabs', () => {
     return sendCommand({ type: 'SET_AUTO_FOCUS_ENABLED', enabled }, 'Failed to set auto-focus')
   }
 
+  function previewTargetLufs(value: number): void {
+    autoBalanceSettings.value = { targetLufs: value }
+    scheduleCommand(
+      'target-lufs',
+      { type: 'SET_TARGET_LUFS', targetLufs: value, persist: false },
+      'Failed to preview target LUFS',
+    )
+  }
+
   function setTargetLufs(value: number): Promise<boolean> {
+    cancelScheduledCommand('target-lufs')
+    autoBalanceSettings.value = { targetLufs: value }
     return sendCommand({ type: 'SET_TARGET_LUFS', targetLufs: value }, 'Failed to set target LUFS')
   }
 
+  function previewLimiter(next: Partial<LimiterSettings>): void {
+    limiterSettings.value = { ...limiterSettings.value, ...next }
+    scheduleCommand(
+      'limiter',
+      { type: 'SET_LIMITER_SETTINGS', settings: limiterSettings.value, persist: false },
+      'Failed to preview limiter settings',
+    )
+  }
+
   function updateLimiter(settings: Partial<LimiterSettings>): Promise<boolean> {
+    cancelScheduledCommand('limiter')
+    limiterSettings.value = { ...limiterSettings.value, ...settings }
     return sendCommand({ type: 'SET_LIMITER_SETTINGS', settings }, 'Failed to update limiter')
   }
 
@@ -365,6 +452,7 @@ export const useTabsStore = defineStore('tabs', () => {
 
   function stopSync(): void {
     syncActive = false
+    cancelAllScheduledCommands()
     disconnectSessionPort()
     disconnectBrowserTabOrderSync()
   }
@@ -399,6 +487,7 @@ export const useTabsStore = defineStore('tabs', () => {
     fetchState,
     registerCurrentTab,
     unregisterTab,
+    previewGain,
     setGain,
     setMaxGain,
     toggleSolo,
@@ -406,7 +495,9 @@ export const useTabsStore = defineStore('tabs', () => {
     toggleFocus,
     clearFocus,
     setAutoFocusEnabled,
+    previewTargetLufs,
     setTargetLufs,
+    previewLimiter,
     setLimiterEnabled,
     setLimiterThreshold,
     setLimiterAttack,
