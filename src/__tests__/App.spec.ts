@@ -59,4 +59,16 @@ describe('App', () => {
     })
     expect(wrapper.text()).toContain('Loudness DD')
   })
+
+  it('links the footer to the Minori Live organization', () => {
+    const wrapper = mount(App, {
+      global: {
+        plugins: [i18n],
+      },
+    })
+    const link = wrapper.get('footer a')
+
+    expect(link.text()).toBe('github.com/minori-live')
+    expect(link.attributes('href')).toBe('https://github.com/minori-live')
+  })
 })

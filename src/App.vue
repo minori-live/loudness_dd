@@ -114,7 +114,7 @@ onUnmounted(() => {
     <footer class="app-footer">
       <span> {{ t('footer.brand') }} </span>
       <span class="separator">•</span>
-      <a href="https://github.com/dsh0416" target="_blank" rel="noopener noreferrer">{{
+      <a href="https://github.com/minori-live" target="_blank" rel="noopener noreferrer">{{
         t('footer.author')
       }}</a>
     </footer>
