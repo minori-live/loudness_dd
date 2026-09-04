@@ -7,7 +7,6 @@ import './styles/base.css'
 // UnoCSS exposes this stylesheet through its Vite plugin at build time.
 // eslint-disable-next-line import/no-unresolved
 import 'virtual:uno.css'
-// import router from './router'
 import { i18n } from './i18n'
 import { useSettingsStore } from './stores/settings'
 
@@ -17,7 +16,6 @@ const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 
 app.use(pinia)
-// app.use(router)
 app.use(i18n)
 
 // Hydrate i18n locale from persisted store before mount

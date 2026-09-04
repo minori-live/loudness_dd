@@ -19,7 +19,7 @@ export default defineConfig({
   plugins: [
     UnoCSS(),
     vue(),
-    vueDevTools(),
+    process.env.NODE_ENV !== 'production' && vueDevTools(),
     VueI18nPlugin({
       include: resolve(import.meta.dirname, 'src/locales/**'),
       strictMessage: false,
@@ -30,7 +30,10 @@ export default defineConfig({
   ],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
-    __VUE_I18N_FULL_INSTALL__: true,
+    __VUE_OPTIONS_API__: false,
+    __VUE_PROD_DEVTOOLS__: false,
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
+    __VUE_I18N_FULL_INSTALL__: false,
     __VUE_I18N_LEGACY_API__: false,
     __INTLIFY_PROD_DEVTOOLS__: false,
   },

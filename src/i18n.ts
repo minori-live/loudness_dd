@@ -13,7 +13,7 @@ export const i18n = createI18n({
   legacy: false,
   locale: normalizeLocaleCode(typeof navigator !== 'undefined' ? navigator.language : 'en'),
   fallbackLocale: 'en',
-  globalInjection: true,
+  globalInjection: false,
   messages: {
     en,
     zh_CN: zhCN,
