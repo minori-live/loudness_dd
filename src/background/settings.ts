@@ -1,5 +1,6 @@
 import {
   DEFAULT_AUTO_BALANCE_SETTINGS,
+  DEFAULT_AUTO_FOCUS_SETTINGS,
   DEFAULT_LIMITER_SETTINGS,
   type LimiterSettings,
   type PersistedSettings,
@@ -15,6 +16,7 @@ function clamp(value: number, minimum: number, maximum: number, fallback: number
 export function normalizeSettings(
   autoBalance?: Partial<PersistedSettings['autoBalance']>,
   limiter?: Partial<LimiterSettings>,
+  autoFocus?: Partial<PersistedSettings['autoFocus']>,
 ): PersistedSettings {
   return {
     autoBalance: {
@@ -28,6 +30,12 @@ export function normalizeSettings(
         0,
         DEFAULT_AUTO_BALANCE_SETTINGS.targetLufs,
       ),
+    },
+    autoFocus: {
+      enabled:
+        typeof autoFocus?.enabled === 'boolean'
+          ? autoFocus.enabled
+          : DEFAULT_AUTO_FOCUS_SETTINGS.enabled,
     },
     limiter: {
       enabled:
@@ -67,10 +75,15 @@ export function normalizeSettings(
 }
 
 async function loadSettings(): Promise<PersistedSettings> {
-  const stored = await chrome.storage.local.get(['autoBalanceSettings', 'limiterSettings'])
+  const stored = await chrome.storage.local.get([
+    'autoBalanceSettings',
+    'autoFocusSettings',
+    'limiterSettings',
+  ])
   return normalizeSettings(
     stored.autoBalanceSettings as Partial<PersistedSettings['autoBalance']> | undefined,
     stored.limiterSettings as Partial<LimiterSettings> | undefined,
+    stored.autoFocusSettings as Partial<PersistedSettings['autoFocus']> | undefined,
   )
 }
 
@@ -87,6 +100,7 @@ export function updateSettings(
     cachedSettings = Promise.resolve(settings)
     await chrome.storage.local.set({
       autoBalanceSettings: settings.autoBalance,
+      autoFocusSettings: settings.autoFocus,
       limiterSettings: settings.limiter,
     })
     return settings

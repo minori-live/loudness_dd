@@ -1,5 +1,6 @@
 import {
   DEFAULT_MAX_GAIN_DB,
+  FOCUS_ATTENUATION_DB,
   GAIN_CHANGE_EPSILON_DB,
   MIN_BLOCKS_FOR_RELIABLE_LUFS,
   MIN_GAIN_DB,
@@ -23,6 +24,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
 export class SessionState<T extends SessionTabState = SessionTabState> {
   readonly #tabs = new Map<number, T>()
   #soloTabId: number | null = null
+  #focusTabId: number | null = null
 
   get size(): number {
     return this.#tabs.size
@@ -30,6 +32,10 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
 
   get soloTabId(): number | null {
     return this.#soloTabId
+  }
+
+  get focusTabId(): number | null {
+    return this.#focusTabId
   }
 
   get(tabId: number): T | undefined {
@@ -50,6 +56,7 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
 
     this.#tabs.delete(tabId)
     if (this.#soloTabId === tabId) this.#soloTabId = null
+    if (this.#focusTabId === tabId) this.#focusTabId = null
     return tab
   }
 
@@ -91,7 +98,12 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
 
   toggleSolo(tabId: number): boolean {
     if (!this.#tabs.has(tabId)) return false
-    this.#soloTabId = this.#soloTabId === tabId ? null : tabId
+    if (this.#soloTabId === tabId) {
+      this.#soloTabId = null
+    } else {
+      this.#soloTabId = tabId
+      this.#focusTabId = null
+    }
     return true
   }
 
@@ -99,8 +111,32 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
     this.#soloTabId = null
   }
 
+  toggleFocus(tabId: number): boolean {
+    if (!this.#tabs.has(tabId)) return false
+    if (this.#focusTabId === tabId) {
+      this.#focusTabId = null
+    } else {
+      this.#focusTabId = tabId
+      this.#soloTabId = null
+    }
+    return true
+  }
+
+  setFocus(tabId: number | null): void {
+    this.#focusTabId = tabId !== null && this.#tabs.has(tabId) ? tabId : null
+    if (this.#focusTabId !== null) this.#soloTabId = null
+  }
+
+  clearFocus(): void {
+    this.#focusTabId = null
+  }
+
   isMuted(tabId: number): boolean {
     return this.#soloTabId !== null && this.#soloTabId !== tabId
+  }
+
+  gainOffsetDb(tabId: number): number {
+    return this.#focusTabId !== null && this.#focusTabId !== tabId ? FOCUS_ATTENUATION_DB : 0
   }
 
   autoBalance(tabId: number, targetLufs: number): number | undefined {
@@ -121,8 +157,10 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
         gainDb: tab.gainDb,
         maxGainDb: tab.maxGainDb,
         isSolo: this.#soloTabId === tab.tabId,
+        isFocused: this.#focusTabId === tab.tabId,
       })),
       soloTabId: this.#soloTabId,
+      focusTabId: this.#focusTabId,
     }
   }
 }

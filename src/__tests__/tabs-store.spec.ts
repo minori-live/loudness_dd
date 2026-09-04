@@ -16,10 +16,13 @@ function extensionState(integrated: number): ExtensionState {
         gainDb: 0,
         maxGainDb: 0,
         isSolo: false,
+        isFocused: false,
       },
     ],
     soloTabId: null,
+    focusTabId: null,
     autoBalanceSettings: { enabled: false, targetLufs: -14 },
+    autoFocusSettings: { enabled: false },
     limiterSettings: {
       enabled: false,
       thresholdDb: -1,
@@ -66,11 +69,36 @@ describe('tabs store session sync', () => {
 
     messageListeners[0]?.({
       type: 'SESSION_UPDATED',
-      session: { ...extensionState(-16), soloTabId: null },
+      session: { ...extensionState(-16), soloTabId: null, focusTabId: null },
     })
     expect(store.tabs[0]?.currentLufs.integrated).toBe(-16)
 
     store.stopSync()
     expect(disconnect).toHaveBeenCalledOnce()
+  })
+
+  it('sends manual focus and auto-focus commands through the background', async () => {
+    const sendMessage = vi.fn(async () => ({ success: true, state: extensionState(-20) }))
+    vi.stubGlobal('chrome', { runtime: { sendMessage } })
+
+    const store = useTabsStore()
+    await store.toggleFocus(1)
+    await store.setAutoFocusEnabled(true)
+
+    expect(sendMessage).toHaveBeenNthCalledWith(1, { type: 'TOGGLE_FOCUS', tabId: 1 })
+    expect(sendMessage).toHaveBeenNthCalledWith(2, {
+      type: 'SET_AUTO_FOCUS_ENABLED',
+      enabled: true,
+    })
+  })
+
+  it('handles an unresponsive stale background without throwing', async () => {
+    vi.stubGlobal('chrome', { runtime: { sendMessage: vi.fn(async () => undefined) } })
+
+    const store = useTabsStore()
+    await expect(store.toggleFocus(1)).resolves.toBe(false)
+    expect(store.error).toBe(
+      'Failed to toggle focus: background did not respond; reload the extension',
+    )
   })
 })

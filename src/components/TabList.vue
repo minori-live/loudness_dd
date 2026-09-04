@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useTabsStore, type CapturedTab, hasEnoughSamples } from '@/stores/tabs'
@@ -9,7 +9,7 @@ import LufsMeter from './LufsMeter.vue'
 const tabsStore = useTabsStore()
 const { t } = useI18n()
 
-const collapsedIds = ref<Set<number>>(new Set())
+const collapsedIds = shallowRef<Set<number>>(new Set())
 
 function isCollapsed(tabId: number): boolean {
   return collapsedIds.value.has(tabId)
@@ -68,10 +68,21 @@ async function handleSolo(tab: CapturedTab): Promise<void> {
   await tabsStore.toggleSolo(tab.tabId)
 }
 
+async function handleFocus(tab: CapturedTab): Promise<void> {
+  await tabsStore.toggleFocus(tab.tabId)
+}
+
+async function handleAutoFocusToggle(): Promise<void> {
+  await tabsStore.setAutoFocusEnabled(!isAutoFocusEnabled.value)
+}
+
 const tabs = computed(() => tabsStore.tabs)
 const targetLufs = computed(() => tabsStore.targetLufs)
 const soloTabId = computed(() => tabsStore.soloTabId)
 const hasSolo = computed(() => tabsStore.hasSolo)
+const focusTabId = computed(() => tabsStore.focusTabId)
+const hasFocus = computed(() => tabsStore.hasFocus)
+const isAutoFocusEnabled = computed(() => tabsStore.isAutoFocusEnabled)
 </script>
 
 <template>
@@ -82,6 +93,26 @@ const hasSolo = computed(() => tabsStore.hasSolo)
       <p class="empty-hint">{{ t('tabs.empty.hint') }}</p>
     </div>
 
+    <div v-else class="focus-toolbar">
+      <div>
+        <div class="focus-toolbar-title">{{ t('tabs.autoFocus.title') }}</div>
+        <div class="focus-toolbar-description">{{ t('tabs.autoFocus.description') }}</div>
+      </div>
+      <button
+        type="button"
+        class="toggle-control"
+        :class="{ 'is-active': isAutoFocusEnabled }"
+        role="switch"
+        :aria-checked="isAutoFocusEnabled"
+        @click="handleAutoFocusToggle"
+      >
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">{{
+          isAutoFocusEnabled ? t('tabs.autoFocus.on') : t('tabs.autoFocus.off')
+        }}</span>
+      </button>
+    </div>
+
     <TransitionGroup name="tab-item" tag="div" class="tabs-container">
       <div
         v-for="tab in tabs"
@@ -90,6 +121,8 @@ const hasSolo = computed(() => tabsStore.hasSolo)
         :class="{
           'is-solo': soloTabId === tab.tabId,
           'is-muted': hasSolo && soloTabId !== tab.tabId,
+          'is-focused': focusTabId === tab.tabId,
+          'is-ducked': hasFocus && focusTabId !== tab.tabId,
           'is-collapsed': isCollapsed(tab.tabId),
         }"
       >
@@ -112,6 +145,16 @@ const hasSolo = computed(() => tabsStore.hasSolo)
               @click.stop="handleSolo(tab)"
             >
               S
+            </button>
+            <button
+              class="action-btn focus-btn"
+              :class="{ active: focusTabId === tab.tabId }"
+              :title="
+                focusTabId === tab.tabId ? t('tabs.actions.focus.on') : t('tabs.actions.focus.off')
+              "
+              @click.stop="handleFocus(tab)"
+            >
+              F
             </button>
             <button
               class="action-btn reset-btn"
@@ -210,6 +253,74 @@ const hasSolo = computed(() => tabsStore.hasSolo)
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.focus-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid rgba(99, 179, 237, 0.18);
+  border-radius: 8px;
+  background: rgba(66, 153, 225, 0.06);
+}
+
+.focus-toolbar-title {
+  color: #bee3f8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.focus-toolbar-description {
+  color: #718096;
+  font-size: 10px;
+}
+
+.toggle-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: #a0aec0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.toggle-track {
+  width: 30px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 999px;
+  background: #4a5568;
+  transition: background 0.15s ease;
+}
+
+.toggle-thumb {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  transition: transform 0.15s ease;
+}
+
+.toggle-control.is-active .toggle-track {
+  background: #4299e1;
+}
+
+.toggle-control.is-active .toggle-thumb {
+  transform: translateX(14px);
+}
+
+.toggle-control:focus-visible {
+  outline: 2px solid #90cdf4;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .empty-state {
@@ -346,6 +457,27 @@ const hasSolo = computed(() => tabsStore.hasSolo)
   background: #dd7824;
 }
 
+.focus-btn {
+  color: #90cdf4;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.focus-btn:hover {
+  background: rgba(66, 153, 225, 0.2);
+  color: #63b3ed;
+}
+
+.focus-btn.active {
+  background: #4299e1;
+  color: #1a1a2e;
+  box-shadow: 0 0 8px rgba(66, 153, 225, 0.5);
+}
+
+.focus-btn.active:hover {
+  background: #3182ce;
+}
+
 /* Solo/Muted states for tab items */
 .tab-item.is-solo {
   border-color: rgba(237, 137, 54, 0.4);
@@ -362,6 +494,25 @@ const hasSolo = computed(() => tabsStore.hasSolo)
 .tab-item.is-muted .tab-title::after {
   content: ' (muted)';
   color: #f56565;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.tab-item.is-focused {
+  border-color: rgba(66, 153, 225, 0.5);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(66, 153, 225, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.tab-item.is-ducked {
+  opacity: 0.72;
+}
+
+.tab-item.is-ducked .tab-title::after {
+  content: ' (-12 dB)';
+  color: #63b3ed;
   font-size: 10px;
   font-weight: 400;
 }

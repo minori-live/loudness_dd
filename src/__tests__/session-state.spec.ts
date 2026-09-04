@@ -31,6 +31,38 @@ describe('SessionState', () => {
     expect(state.setMaxGain(1, Number.POSITIVE_INFINITY)).toBe(-3)
   })
 
+  it('adds a -12 dB offset to other tabs while preserving their base gain', () => {
+    const state = new SessionState()
+    state.add(createSessionTab(1, 'One', 'https://one.example'))
+    state.add(createSessionTab(2, 'Two', 'https://two.example'))
+    state.setGain(2, -8)
+
+    expect(state.toggleFocus(1)).toBe(true)
+    expect(state.gainOffsetDb(1)).toBe(0)
+    expect(state.gainOffsetDb(2)).toBe(-12)
+    expect(state.get(2)?.gainDb).toBe(-8)
+    expect(state.snapshot()).toMatchObject({ focusTabId: 1, soloTabId: null })
+
+    state.clearFocus()
+    expect(state.gainOffsetDb(2)).toBe(0)
+    expect(state.get(2)?.gainDb).toBe(-8)
+  })
+
+  it('keeps solo and focus mutually exclusive', () => {
+    const state = new SessionState()
+    state.add(createSessionTab(1, 'One', 'https://one.example'))
+    state.add(createSessionTab(2, 'Two', 'https://two.example'))
+
+    state.toggleFocus(1)
+    state.toggleSolo(2)
+    expect(state.focusTabId).toBeNull()
+    expect(state.soloTabId).toBe(2)
+
+    state.setFocus(1)
+    expect(state.focusTabId).toBe(1)
+    expect(state.soloTabId).toBeNull()
+  })
+
   it('balances only after enough reliable LUFS blocks exist', () => {
     const state = new SessionState()
     state.add(createSessionTab(1, 'One', 'https://one.example'))
@@ -46,7 +78,7 @@ describe('SessionState', () => {
     expect(state.autoBalance(1, -14)).toBe(6)
   })
 
-  it('clears solo when the soloed tab is removed', () => {
+  it('clears solo or focus when its target tab is removed', () => {
     const state = new SessionState()
     state.add(createSessionTab(1, 'One', 'https://one.example'))
     state.add(createSessionTab(2, 'Two', 'https://two.example'))
@@ -56,5 +88,11 @@ describe('SessionState', () => {
 
     expect(state.soloTabId).toBeNull()
     expect(state.isMuted(2)).toBe(false)
+
+    state.add(createSessionTab(1, 'One', 'https://one.example'))
+    state.toggleFocus(1)
+    state.remove(1)
+    expect(state.focusTabId).toBeNull()
+    expect(state.gainOffsetDb(2)).toBe(0)
   })
 })

@@ -44,6 +44,8 @@
 
 - Register and monitor multiple tabs simultaneously
 - Per-tab volume control with mute/unmute
+- Solo and Focus modes: mute other monitored tabs, or lower them by 12 dB
+- Optional auto-focus follows the active monitored tab
 - Visual indicators for active captures
 - Clean, modern dark UI optimized for quick adjustments
 

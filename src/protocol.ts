@@ -5,6 +5,7 @@ export const MIN_BLOCKS_FOR_RELIABLE_LUFS = 10
 export const MIN_GAIN_DB = -60
 export const DEFAULT_MAX_GAIN_DB = 0
 export const GAIN_CHANGE_EPSILON_DB = 0.01
+export const FOCUS_ATTENUATION_DB = -12
 
 export interface TabLufs {
   momentary: number
@@ -22,11 +23,16 @@ export interface CapturedTab {
   gainDb: number
   maxGainDb: number
   isSolo: boolean
+  isFocused: boolean
 }
 
 export interface AutoBalanceSettings {
   enabled: boolean
   targetLufs: number
+}
+
+export interface AutoFocusSettings {
+  enabled: boolean
 }
 
 export interface LimiterSettings {
@@ -40,22 +46,29 @@ export interface LimiterSettings {
 
 export interface PersistedSettings {
   autoBalance: AutoBalanceSettings
+  autoFocus: AutoFocusSettings
   limiter: LimiterSettings
 }
 
 export interface SessionSnapshot {
   tabs: CapturedTab[]
   soloTabId: number | null
+  focusTabId: number | null
 }
 
 export interface ExtensionState extends SessionSnapshot {
   autoBalanceSettings: AutoBalanceSettings
+  autoFocusSettings: AutoFocusSettings
   limiterSettings: LimiterSettings
 }
 
 export const DEFAULT_AUTO_BALANCE_SETTINGS: Readonly<AutoBalanceSettings> = {
   enabled: false,
   targetLufs: -14,
+}
+
+export const DEFAULT_AUTO_FOCUS_SETTINGS: Readonly<AutoFocusSettings> = {
+  enabled: false,
 }
 
 export const DEFAULT_LIMITER_SETTINGS: Readonly<LimiterSettings> = {
@@ -77,12 +90,13 @@ export function emptyLufs(): TabLufs {
 }
 
 export function emptySession(): SessionSnapshot {
-  return { tabs: [], soloTabId: null }
+  return { tabs: [], soloTabId: null, focusTabId: null }
 }
 
 export function createDefaultSettings(): PersistedSettings {
   return {
     autoBalance: { ...DEFAULT_AUTO_BALANCE_SETTINGS },
+    autoFocus: { ...DEFAULT_AUTO_FOCUS_SETTINGS },
     limiter: { ...DEFAULT_LIMITER_SETTINGS },
   }
 }
@@ -95,6 +109,9 @@ export type BackgroundRequest =
   | { type: 'SET_MAX_GAIN_REQUEST'; tabId: number; maxGainDb: number }
   | { type: 'TOGGLE_SOLO'; tabId: number }
   | { type: 'CLEAR_SOLO' }
+  | { type: 'TOGGLE_FOCUS'; tabId: number }
+  | { type: 'CLEAR_FOCUS' }
+  | { type: 'SET_AUTO_FOCUS_ENABLED'; enabled: boolean }
   | { type: 'AUTO_BALANCE_REQUEST'; targetLufs?: number }
   | { type: 'SET_AUTO_BALANCE_ENABLED'; enabled: boolean }
   | { type: 'SET_TARGET_LUFS'; targetLufs: number }
@@ -120,6 +137,9 @@ export type OffscreenRequest =
     }
   | { type: 'TOGGLE_SOLO'; target: typeof OFFSCREEN_TARGET; tabId: number }
   | { type: 'CLEAR_SOLO'; target: typeof OFFSCREEN_TARGET }
+  | { type: 'TOGGLE_FOCUS'; target: typeof OFFSCREEN_TARGET; tabId: number }
+  | { type: 'SET_FOCUS'; target: typeof OFFSCREEN_TARGET; tabId: number | null }
+  | { type: 'CLEAR_FOCUS'; target: typeof OFFSCREEN_TARGET }
   | { type: 'AUTO_BALANCE_ONCE'; target: typeof OFFSCREEN_TARGET; targetLufs: number }
   | { type: 'RESET_LUFS'; target: typeof OFFSCREEN_TARGET; tabId: number }
   | {

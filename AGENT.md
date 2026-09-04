@@ -20,7 +20,9 @@ Loudness DD is a Chrome MV3 extension that:
 
 - Captures audio from selected tabs, measures loudness in LUFS (BS.1770-5), and balances levels toward a target LUFS.
 - Provides a limiter to prevent clipping.
-- Lets users register tabs, toggle auto-balance, set target LUFS, and manage per‑tab gain.
+- Lets users register tabs, toggle auto-balance, set target LUFS, manage per-tab gain, and use
+  Solo or Focus modes. Focus lowers non-focused captures by 12 dB; auto-focus follows the active
+  monitored tab.
 
 ## Key architecture
 
@@ -56,6 +58,9 @@ Background request/response messages (async responses):
 - `SET_MAX_GAIN_REQUEST` { tabId, maxGainDb } → { success, error? }
 - `TOGGLE_SOLO` { tabId } → { success, state }
 - `CLEAR_SOLO` → { success, state }
+- `TOGGLE_FOCUS` { tabId } → { success, state }
+- `CLEAR_FOCUS` → { success, state }
+- `SET_AUTO_FOCUS_ENABLED` { enabled } → { success, state }
 - `AUTO_BALANCE_REQUEST` { targetLufs? } → { success }
 - `RESET_LUFS_REQUEST` { tabId } → { success }
 
@@ -66,7 +71,8 @@ Offscreen-targeted commands (Background → Offscreen via `target: 'offscreen'`)
 
 - `SYNC_SETTINGS` { settings } → { success, session }
 - `START_CAPTURE` { tabId, streamId, title, url } → { success, session, error? }
-- `STOP_CAPTURE`, `SET_GAIN`, `SET_MAX_GAIN`, `TOGGLE_SOLO`, `CLEAR_SOLO`,
+- `STOP_CAPTURE`, `SET_GAIN`, `SET_MAX_GAIN`, `TOGGLE_SOLO`, `CLEAR_SOLO`, `TOGGLE_FOCUS`,
+  `SET_FOCUS`, `CLEAR_FOCUS`,
   `AUTO_BALANCE_ONCE`, `RESET_LUFS`, and `UPDATE_TAB_METADATA` all return a session snapshot.
 
 Offscreen lifecycle notification:

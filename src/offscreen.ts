@@ -80,7 +80,9 @@ function applyLimiterSettings(node: DynamicsCompressorNode, limiter: LimiterSett
 }
 
 function applyEffectiveGain(processor: TabAudioProcessor): void {
-  const gain = session.isMuted(processor.tabId) ? 0 : dbToGain(processor.gainDb)
+  const gain = session.isMuted(processor.tabId)
+    ? 0
+    : dbToGain(processor.gainDb + session.gainOffsetDb(processor.tabId))
   processor.gainNode.gain.setValueAtTime(gain, processor.audioContext.currentTime)
 }
 
@@ -91,6 +93,7 @@ function applyAllGains(): void {
 function syncSettings(nextSettings: PersistedSettings): void {
   settings = {
     autoBalance: { ...nextSettings.autoBalance },
+    autoFocus: { ...nextSettings.autoFocus },
     limiter: { ...nextSettings.limiter },
   }
   for (const processor of session.values()) {
@@ -313,6 +316,20 @@ function toggleSolo(tabId: number): OffscreenResponse {
   return response(true)
 }
 
+function toggleFocus(tabId: number): OffscreenResponse {
+  if (!session.toggleFocus(tabId)) return response(false, 'Tab is not being captured')
+  applyAllGains()
+  notifySubscribers()
+  return response(true)
+}
+
+function setFocus(tabId: number | null): OffscreenResponse {
+  session.setFocus(tabId)
+  applyAllGains()
+  notifySubscribers()
+  return response(true)
+}
+
 function autoBalanceOnce(targetLufs: number): OffscreenResponse {
   for (const processor of session.values()) {
     if (session.autoBalance(processor.tabId, targetLufs) !== undefined) {
@@ -337,6 +354,15 @@ function handleMessage(message: OffscreenRequest): OffscreenResponse | Promise<O
       return toggleSolo(message.tabId)
     case 'CLEAR_SOLO':
       session.clearSolo()
+      applyAllGains()
+      notifySubscribers()
+      return response(true)
+    case 'TOGGLE_FOCUS':
+      return toggleFocus(message.tabId)
+    case 'SET_FOCUS':
+      return setFocus(message.tabId)
+    case 'CLEAR_FOCUS':
+      session.clearFocus()
       applyAllGains()
       notifySubscribers()
       return response(true)

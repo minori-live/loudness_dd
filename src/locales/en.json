@@ -74,8 +74,18 @@
         "on": "Un-solo (restore all)",
         "off": "Solo (mute others)"
       },
+      "focus": {
+        "on": "Unfocus (restore all)",
+        "off": "Focus (lower others by 12 dB)"
+      },
       "reset": "Reset LUFS measurement",
       "stop": "Stop monitoring"
+    },
+    "autoFocus": {
+      "title": "Auto-focus active tab",
+      "description": "Focuses a monitored tab whenever it becomes active.",
+      "on": "On",
+      "off": "Off"
     },
     "maxBoost": "Max boost:",
     "status": {

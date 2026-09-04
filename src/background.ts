@@ -36,6 +36,9 @@ const BACKGROUND_REQUEST_TYPES = new Set<BackgroundRequest['type']>([
   'SET_MAX_GAIN_REQUEST',
   'TOGGLE_SOLO',
   'CLEAR_SOLO',
+  'TOGGLE_FOCUS',
+  'CLEAR_FOCUS',
+  'SET_AUTO_FOCUS_ENABLED',
   'AUTO_BALANCE_REQUEST',
   'SET_AUTO_BALANCE_ENABLED',
   'SET_TARGET_LUFS',
@@ -52,6 +55,7 @@ function toExtensionState(session: SessionSnapshot, settings: PersistedSettings)
   return {
     ...session,
     autoBalanceSettings: { ...settings.autoBalance },
+    autoFocusSettings: { ...settings.autoFocus },
     limiterSettings: { ...settings.limiter },
   }
 }
@@ -73,6 +77,26 @@ async function getState(): Promise<ExtensionState> {
   const session = result?.session ?? emptySession()
   await updateBadge(session.tabs.length, settings.autoBalance.enabled)
   return toExtensionState(session, settings)
+}
+
+async function getActiveTabId(windowId?: number): Promise<number | null> {
+  const query =
+    windowId === undefined ? { active: true, lastFocusedWindow: true } : { active: true, windowId }
+  const [activeTab] = await chrome.tabs.query(query)
+  return activeTab?.id ?? null
+}
+
+async function syncAutoFocus(tabId?: number | null): Promise<SessionSnapshot | null> {
+  const settings = await getSettings()
+  if (!settings.autoFocus.enabled) return null
+
+  const activeTabId = tabId === undefined ? await getActiveTabId() : tabId
+  const result = await sendToExistingOffscreen({
+    type: 'SET_FOCUS',
+    target: OFFSCREEN_TARGET,
+    tabId: activeTabId,
+  })
+  return result?.session ?? null
 }
 
 async function startTabCapture(tabId: number): Promise<CommandResponse> {
@@ -105,11 +129,13 @@ async function startTabCapture(tabId: number): Promise<CommandResponse> {
       title: tab.title || 'Unknown Tab',
       url: tab.url || '',
     })
-    await updateBadge(result.session.tabs.length, settings.autoBalance.enabled)
-    if (!result.success) await closeOffscreenIfIdle(result.session.tabs.length)
+    const focusedSession = result.success ? await syncAutoFocus() : null
+    const session = focusedSession ?? result.session
+    await updateBadge(session.tabs.length, settings.autoBalance.enabled)
+    if (!result.success) await closeOffscreenIfIdle(session.tabs.length)
     return {
       success: result.success,
-      state: toExtensionState(result.session, settings),
+      state: toExtensionState(session, settings),
       error: result.error,
     }
   })()
@@ -199,6 +225,24 @@ async function handleRequest(message: BackgroundRequest): Promise<CommandRespons
       })
     case 'CLEAR_SOLO':
       return runSessionCommand({ type: 'CLEAR_SOLO', target: OFFSCREEN_TARGET })
+    case 'TOGGLE_FOCUS':
+      return runSessionCommand({
+        type: 'TOGGLE_FOCUS',
+        target: OFFSCREEN_TARGET,
+        tabId: message.tabId,
+      })
+    case 'CLEAR_FOCUS':
+      return runSessionCommand({ type: 'CLEAR_FOCUS', target: OFFSCREEN_TARGET })
+    case 'SET_AUTO_FOCUS_ENABLED': {
+      const result = await applySettingsUpdate((current) =>
+        normalizeSettings(current.autoBalance, current.limiter, { enabled: message.enabled }),
+      )
+      if (!message.enabled) return result
+
+      const session = await syncAutoFocus()
+      const settings = await getSettings()
+      return session ? { success: true, state: toExtensionState(session, settings) } : result
+    }
     case 'AUTO_BALANCE_REQUEST': {
       const settings = await getSettings()
       return runSessionCommand({
@@ -214,18 +258,27 @@ async function handleRequest(message: BackgroundRequest): Promise<CommandRespons
     }
     case 'SET_AUTO_BALANCE_ENABLED':
       return applySettingsUpdate((current) =>
-        normalizeSettings({ ...current.autoBalance, enabled: message.enabled }, current.limiter),
+        normalizeSettings(
+          { ...current.autoBalance, enabled: message.enabled },
+          current.limiter,
+          current.autoFocus,
+        ),
       )
     case 'SET_TARGET_LUFS':
       return applySettingsUpdate((current) =>
         normalizeSettings(
           { ...current.autoBalance, targetLufs: message.targetLufs },
           current.limiter,
+          current.autoFocus,
         ),
       )
     case 'SET_LIMITER_SETTINGS':
       return applySettingsUpdate((current) =>
-        normalizeSettings(current.autoBalance, { ...current.limiter, ...message.settings }),
+        normalizeSettings(
+          current.autoBalance,
+          { ...current.limiter, ...message.settings },
+          current.autoFocus,
+        ),
       )
     case 'RESET_LUFS_REQUEST':
       return runSessionCommand({
@@ -282,6 +335,13 @@ async function stopExistingCapture(tabId: number): Promise<void> {
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => void stopExistingCapture(tabId))
+
+chrome.tabs.onActivated.addListener(({ tabId }) => void syncAutoFocus(tabId))
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return
+  void getActiveTabId(windowId).then((tabId) => syncAutoFocus(tabId))
+})
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!changeInfo.title && !changeInfo.url) return

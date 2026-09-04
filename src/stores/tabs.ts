@@ -3,10 +3,12 @@ import { computed, shallowRef } from 'vue'
 
 import {
   DEFAULT_AUTO_BALANCE_SETTINGS,
+  DEFAULT_AUTO_FOCUS_SETTINGS,
   DEFAULT_LIMITER_SETTINGS,
   MIN_BLOCKS_FOR_RELIABLE_LUFS,
   SESSION_PORT_NAME,
   type AutoBalanceSettings,
+  type AutoFocusSettings,
   type BackgroundRequest,
   type CapturedTab,
   type CommandResponse,
@@ -18,7 +20,7 @@ import {
 } from '@/protocol'
 
 export { MIN_BLOCKS_FOR_RELIABLE_LUFS }
-export type { AutoBalanceSettings, CapturedTab, LimiterSettings, TabLufs }
+export type { AutoBalanceSettings, AutoFocusSettings, CapturedTab, LimiterSettings, TabLufs }
 
 export function hasEnoughSamples(lufs: TabLufs): boolean {
   return lufs.blockCount >= MIN_BLOCKS_FOR_RELIABLE_LUFS
@@ -38,12 +40,23 @@ function isSessionPortMessage(message: unknown): message is SessionPortMessage {
   )
 }
 
+function isCommandResponse(response: unknown): response is CommandResponse {
+  return Boolean(
+    response &&
+    typeof response === 'object' &&
+    'success' in response &&
+    typeof response.success === 'boolean',
+  )
+}
+
 export const useTabsStore = defineStore('tabs', () => {
   const tabs = shallowRef<CapturedTab[]>([])
   const soloTabId = shallowRef<number | null>(null)
+  const focusTabId = shallowRef<number | null>(null)
   const autoBalanceSettings = shallowRef<AutoBalanceSettings>({
     ...DEFAULT_AUTO_BALANCE_SETTINGS,
   })
+  const autoFocusSettings = shallowRef<AutoFocusSettings>({ ...DEFAULT_AUTO_FOCUS_SETTINGS })
   const limiterSettings = shallowRef<LimiterSettings>({ ...DEFAULT_LIMITER_SETTINGS })
   const isLoading = shallowRef(false)
   const error = shallowRef<string | null>(null)
@@ -67,15 +80,19 @@ export const useTabsStore = defineStore('tabs', () => {
   const limiterKnee = computed(() => limiterSettings.value.kneeDb)
   const limiterRatio = computed(() => limiterSettings.value.ratio)
   const hasSolo = computed(() => soloTabId.value !== null)
+  const hasFocus = computed(() => focusTabId.value !== null)
+  const isAutoFocusEnabled = computed(() => autoFocusSettings.value.enabled)
 
   function applySession(session: SessionSnapshot): void {
     tabs.value = session.tabs
     soloTabId.value = session.soloTabId
+    focusTabId.value = session.focusTabId ?? null
   }
 
   function applyState(state: ExtensionState): void {
     applySession(state)
     autoBalanceSettings.value = state.autoBalanceSettings
+    autoFocusSettings.value = state.autoFocusSettings ?? { ...DEFAULT_AUTO_FOCUS_SETTINGS }
     limiterSettings.value = state.limiterSettings
   }
 
@@ -100,7 +117,11 @@ export const useTabsStore = defineStore('tabs', () => {
 
   async function sendCommand(message: BackgroundRequest, fallback: string): Promise<boolean> {
     try {
-      const result = (await chrome.runtime.sendMessage(message)) as CommandResponse
+      const result: unknown = await chrome.runtime.sendMessage(message)
+      if (!isCommandResponse(result)) {
+        error.value = `${fallback}: background did not respond; reload the extension`
+        return false
+      }
       if (result.state) applyState(result.state)
       if (!result.success) error.value = result.error || fallback
       return result.success
@@ -179,6 +200,18 @@ export const useTabsStore = defineStore('tabs', () => {
     return sendCommand({ type: 'CLEAR_SOLO' }, 'Failed to clear solo')
   }
 
+  function toggleFocus(tabId: number): Promise<boolean> {
+    return sendCommand({ type: 'TOGGLE_FOCUS', tabId }, 'Failed to toggle focus')
+  }
+
+  function clearFocus(): Promise<boolean> {
+    return sendCommand({ type: 'CLEAR_FOCUS' }, 'Failed to clear focus')
+  }
+
+  function setAutoFocusEnabled(enabled: boolean): Promise<boolean> {
+    return sendCommand({ type: 'SET_AUTO_FOCUS_ENABLED', enabled }, 'Failed to set auto-focus')
+  }
+
   function autoBalanceNow(): Promise<boolean> {
     return sendCommand(
       { type: 'AUTO_BALANCE_REQUEST', targetLufs: autoBalanceSettings.value.targetLufs },
@@ -249,7 +282,9 @@ export const useTabsStore = defineStore('tabs', () => {
   return {
     tabs,
     soloTabId,
+    focusTabId,
     autoBalanceSettings,
+    autoFocusSettings,
     limiterSettings,
     isLoading,
     error,
@@ -265,6 +300,8 @@ export const useTabsStore = defineStore('tabs', () => {
     limiterKnee,
     limiterRatio,
     hasSolo,
+    hasFocus,
+    isAutoFocusEnabled,
     fetchState,
     registerCurrentTab,
     unregisterTab,
@@ -272,6 +309,9 @@ export const useTabsStore = defineStore('tabs', () => {
     setMaxGain,
     toggleSolo,
     clearSolo,
+    toggleFocus,
+    clearFocus,
+    setAutoFocusEnabled,
     autoBalanceNow,
     setAutoBalanceEnabled,
     toggleAutoBalance,

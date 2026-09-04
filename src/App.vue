@@ -259,6 +259,7 @@ body,
 /* Main Content */
 .app-content {
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 16px;
   display: flex;

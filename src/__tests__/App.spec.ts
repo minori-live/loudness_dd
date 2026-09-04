@@ -16,6 +16,9 @@ vi.mock('@/stores/tabs', () => {
       targetLufs: -14,
       soloTabId: null,
       hasSolo: false,
+      focusTabId: null,
+      hasFocus: false,
+      isAutoFocusEnabled: false,
       // actions used by App.vue
       registerCurrentTab: vi.fn(async () => {}),
       clearError: vi.fn(() => {}),
@@ -27,6 +30,8 @@ vi.mock('@/stores/tabs', () => {
       unregisterTab: vi.fn(async () => {}),
       resetLufs: vi.fn(async () => {}),
       toggleSolo: vi.fn(async () => {}),
+      toggleFocus: vi.fn(async () => {}),
+      setAutoFocusEnabled: vi.fn(async () => {}),
     }),
   }
 })
