@@ -24,7 +24,7 @@ function extensionState(integrated: number, tabIds = [1]): ExtensionState {
     soloTabId: null,
     focusTabId: null,
     autoBalanceSettings: { targetLufs: -14 },
-    autoFocusSettings: { enabled: false },
+    autoFocusSettings: { enabled: false, attenuationDb: -12 },
     limiterSettings: {
       enabled: false,
       thresholdDb: -1,
@@ -188,8 +188,8 @@ describe('tabs store session sync', () => {
 
     expect(sendMessage).toHaveBeenNthCalledWith(1, { type: 'TOGGLE_FOCUS', tabId: 1 })
     expect(sendMessage).toHaveBeenNthCalledWith(2, {
-      type: 'SET_AUTO_FOCUS_ENABLED',
-      enabled: true,
+      type: 'SET_AUTO_FOCUS_SETTINGS',
+      settings: { enabled: true },
     })
   })
 
@@ -204,15 +204,17 @@ describe('tabs store session sync', () => {
     store.previewGain(1, -3)
     store.previewTargetLufs(-18)
     store.previewLimiter({ thresholdDb: -2 })
+    store.previewAutoFocusAttenuation(-24)
 
     expect(store.tabs[0]?.gainDb).toBe(-3)
     expect(store.targetLufs).toBe(-18)
     expect(store.limiterThreshold).toBe(-2)
+    expect(store.autoFocusAttenuationDb).toBe(-24)
     expect(sendMessage).toHaveBeenCalledOnce()
 
     await vi.advanceTimersByTimeAsync(50)
 
-    expect(sendMessage).toHaveBeenCalledTimes(4)
+    expect(sendMessage).toHaveBeenCalledTimes(5)
     expect(sendMessage).toHaveBeenCalledWith({
       type: 'SET_GAIN_REQUEST',
       tabId: 1,
@@ -228,9 +230,20 @@ describe('tabs store session sync', () => {
       settings: expect.objectContaining({ thresholdDb: -2 }),
       persist: false,
     })
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'SET_AUTO_FOCUS_SETTINGS',
+      settings: { attenuationDb: -24 },
+      persist: false,
+    })
 
     await store.setTargetLufs(-18)
     expect(sendMessage).toHaveBeenLastCalledWith({ type: 'SET_TARGET_LUFS', targetLufs: -18 })
+
+    await store.setAutoFocusAttenuation(-24)
+    expect(sendMessage).toHaveBeenLastCalledWith({
+      type: 'SET_AUTO_FOCUS_SETTINGS',
+      settings: { attenuationDb: -24 },
+    })
   })
 
   it('handles an unresponsive stale background without throwing', async () => {

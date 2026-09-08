@@ -132,6 +132,7 @@ export const useTabsStore = defineStore('tabs', () => {
   const hasSolo = computed(() => soloTabId.value !== null)
   const hasFocus = computed(() => focusTabId.value !== null)
   const isAutoFocusEnabled = computed(() => autoFocusSettings.value.enabled)
+  const autoFocusAttenuationDb = computed(() => autoFocusSettings.value.attenuationDb)
 
   function applySession(session: SessionSnapshot): void {
     tabs.value = session.tabs
@@ -381,7 +382,32 @@ export const useTabsStore = defineStore('tabs', () => {
   }
 
   function setAutoFocusEnabled(enabled: boolean): Promise<boolean> {
-    return sendCommand({ type: 'SET_AUTO_FOCUS_ENABLED', enabled }, 'Failed to set auto-focus')
+    return sendCommand(
+      { type: 'SET_AUTO_FOCUS_SETTINGS', settings: { enabled } },
+      'Failed to set auto-focus',
+    )
+  }
+
+  function previewAutoFocusAttenuation(attenuationDb: number): void {
+    autoFocusSettings.value = { ...autoFocusSettings.value, attenuationDb }
+    scheduleCommand(
+      'auto-focus-attenuation',
+      {
+        type: 'SET_AUTO_FOCUS_SETTINGS',
+        settings: { attenuationDb },
+        persist: false,
+      },
+      'Failed to preview auto-focus attenuation',
+    )
+  }
+
+  function setAutoFocusAttenuation(attenuationDb: number): Promise<boolean> {
+    cancelScheduledCommand('auto-focus-attenuation')
+    autoFocusSettings.value = { ...autoFocusSettings.value, attenuationDb }
+    return sendCommand(
+      { type: 'SET_AUTO_FOCUS_SETTINGS', settings: { attenuationDb } },
+      'Failed to set auto-focus attenuation',
+    )
   }
 
   function previewTargetLufs(value: number): void {
@@ -484,6 +510,7 @@ export const useTabsStore = defineStore('tabs', () => {
     hasSolo,
     hasFocus,
     isAutoFocusEnabled,
+    autoFocusAttenuationDb,
     fetchState,
     registerCurrentTab,
     unregisterTab,
@@ -495,6 +522,8 @@ export const useTabsStore = defineStore('tabs', () => {
     toggleFocus,
     clearFocus,
     setAutoFocusEnabled,
+    previewAutoFocusAttenuation,
+    setAutoFocusAttenuation,
     previewTargetLufs,
     setTargetLufs,
     previewLimiter,

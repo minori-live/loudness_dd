@@ -2,6 +2,8 @@ import {
   DEFAULT_AUTO_BALANCE_SETTINGS,
   DEFAULT_AUTO_FOCUS_SETTINGS,
   DEFAULT_LIMITER_SETTINGS,
+  MAX_FOCUS_ATTENUATION_DB,
+  MIN_FOCUS_ATTENUATION_DB,
   type LimiterSettings,
   type PersistedSettings,
 } from '@/protocol'
@@ -32,6 +34,12 @@ export function normalizeSettings(
         typeof autoFocus?.enabled === 'boolean'
           ? autoFocus.enabled
           : DEFAULT_AUTO_FOCUS_SETTINGS.enabled,
+      attenuationDb: clamp(
+        autoFocus?.attenuationDb ?? DEFAULT_AUTO_FOCUS_SETTINGS.attenuationDb,
+        MIN_FOCUS_ATTENUATION_DB,
+        MAX_FOCUS_ATTENUATION_DB,
+        DEFAULT_AUTO_FOCUS_SETTINGS.attenuationDb,
+      ),
     },
     limiter: {
       enabled:

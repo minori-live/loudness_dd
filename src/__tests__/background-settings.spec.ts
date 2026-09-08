@@ -6,13 +6,15 @@ describe('normalizeSettings', () => {
   it('merges stored partial settings with defaults', () => {
     expect(normalizeSettings(undefined, { ratio: 8 })).toMatchObject({
       autoBalance: { targetLufs: -14 },
-      autoFocus: { enabled: false },
+      autoFocus: { enabled: false, attenuationDb: -12 },
       limiter: { enabled: false, thresholdDb: -1, ratio: 8 },
     })
   })
 
-  it('normalizes the persisted auto-focus switch', () => {
-    expect(normalizeSettings(undefined, undefined, { enabled: true }).autoFocus.enabled).toBe(true)
+  it('normalizes persisted auto-focus settings', () => {
+    expect(
+      normalizeSettings(undefined, undefined, { enabled: true, attenuationDb: -24 }).autoFocus,
+    ).toEqual({ enabled: true, attenuationDb: -24 })
   })
 
   it('clamps invalid persisted values at the boundary', () => {
@@ -29,5 +31,8 @@ describe('normalizeSettings', () => {
       ratio: 1,
       attackMs: 0,
     })
+    expect(
+      normalizeSettings(undefined, undefined, { attenuationDb: -200 }).autoFocus,
+    ).toMatchObject({ attenuationDb: -60 })
   })
 })

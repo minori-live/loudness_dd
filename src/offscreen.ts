@@ -194,7 +194,9 @@ function configureLimiter(processor: TabAudioProcessor, limiter: LimiterSettings
 function applyEffectiveGain(processor: TabAudioProcessor, smooth = false): void {
   const gain = session.isMuted(processor.tabId)
     ? 0
-    : dbToGain(processor.gainDb + session.gainOffsetDb(processor.tabId))
+    : dbToGain(
+        processor.gainDb + session.gainOffsetDb(processor.tabId, settings.autoFocus.attenuationDb),
+      )
   const time = processor.gainNode.context.currentTime
   processor.gainNode.gain.cancelScheduledValues(time)
   if (smooth) {
@@ -204,11 +206,13 @@ function applyEffectiveGain(processor: TabAudioProcessor, smooth = false): void 
   }
 }
 
-function applyAllGains(): void {
-  for (const processor of session.values()) applyEffectiveGain(processor)
+function applyAllGains(smooth = false): void {
+  for (const processor of session.values()) applyEffectiveGain(processor, smooth)
 }
 
 function syncSettings(nextSettings: PersistedSettings): void {
+  const focusAttenuationChanged =
+    settings.autoFocus.attenuationDb !== nextSettings.autoFocus.attenuationDb
   const limiterChanged = Object.entries(nextSettings.limiter).some(
     ([key, value]) => settings.limiter[key as keyof LimiterSettings] !== value,
   )
@@ -222,6 +226,7 @@ function syncSettings(nextSettings: PersistedSettings): void {
       configureLimiter(processor, settings.limiter)
     }
   }
+  if (focusAttenuationChanged) applyAllGains(true)
 }
 
 async function performCleanup(tabId: number): Promise<boolean> {

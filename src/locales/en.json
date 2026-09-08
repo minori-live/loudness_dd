@@ -70,7 +70,7 @@
       },
       "focus": {
         "on": "Unfocus (restore all)",
-        "off": "Focus (lower others by 12 dB)"
+        "off": "Focus (lower other tabs)"
       },
       "reset": "Reset LUFS measurement",
       "stop": "Stop monitoring"
@@ -78,6 +78,7 @@
     "autoFocus": {
       "title": "Auto-focus active tab",
       "description": "Focuses a monitored tab whenever it becomes active.",
+      "attenuation": "Other tabs attenuation",
       "on": "On",
       "off": "Off"
     },

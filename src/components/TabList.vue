@@ -27,7 +27,10 @@ const focusTabId = computed(() => tabsStore.focusTabId)
     <AutoFocusControl
       v-else
       :enabled="tabsStore.isAutoFocusEnabled"
+      :attenuation-db="tabsStore.autoFocusAttenuationDb"
       @toggle="tabsStore.setAutoFocusEnabled($event)"
+      @attenuation-preview="tabsStore.previewAutoFocusAttenuation($event)"
+      @attenuation="tabsStore.setAutoFocusAttenuation($event)"
     />
 
     <TransitionGroup name="tab-item" tag="div" class="grid grid-cols-2 gap-3">

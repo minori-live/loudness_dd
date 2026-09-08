@@ -38,7 +38,7 @@ const BACKGROUND_REQUEST_TYPES = new Set<BackgroundRequest['type']>([
   'CLEAR_SOLO',
   'TOGGLE_FOCUS',
   'CLEAR_FOCUS',
-  'SET_AUTO_FOCUS_ENABLED',
+  'SET_AUTO_FOCUS_SETTINGS',
   'SET_TARGET_LUFS',
   'SET_LIMITER_SETTINGS',
   'RESET_LUFS_REQUEST',
@@ -238,11 +238,15 @@ async function handleRequest(message: BackgroundRequest): Promise<CommandRespons
       })
     case 'CLEAR_FOCUS':
       return runSessionCommand({ type: 'CLEAR_FOCUS', target: OFFSCREEN_TARGET })
-    case 'SET_AUTO_FOCUS_ENABLED': {
-      const result = await applySettingsUpdate((current) =>
-        normalizeSettings(current.autoBalance, current.limiter, { enabled: message.enabled }),
+    case 'SET_AUTO_FOCUS_SETTINGS': {
+      const result = await (message.persist === false ? applySettingsPreview : applySettingsUpdate)(
+        (current) =>
+          normalizeSettings(current.autoBalance, current.limiter, {
+            ...current.autoFocus,
+            ...message.settings,
+          }),
       )
-      if (!message.enabled) return result
+      if (message.persist === false || message.settings.enabled !== true) return result
 
       const session = await syncAutoFocus()
       const settings = await getSettings()

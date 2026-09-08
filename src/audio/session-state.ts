@@ -140,8 +140,8 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
     return this.#soloTabId !== null && this.#soloTabId !== tabId
   }
 
-  gainOffsetDb(tabId: number): number {
-    return this.#focusTabId !== null && this.#focusTabId !== tabId ? FOCUS_ATTENUATION_DB : 0
+  gainOffsetDb(tabId: number, attenuationDb = FOCUS_ATTENUATION_DB): number {
+    return this.#focusTabId !== null && this.#focusTabId !== tabId ? attenuationDb : 0
   }
 
   autoBalance(tabId: number, targetLufs: number): GainUpdate | undefined {

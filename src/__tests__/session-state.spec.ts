@@ -31,7 +31,7 @@ describe('SessionState', () => {
     expect(state.setMaxGain(1, Number.POSITIVE_INFINITY)).toBe(-3)
   })
 
-  it('adds a -12 dB offset to other tabs while preserving their base gain', () => {
+  it('adds the configured offset to other tabs while preserving their base gain', () => {
     const state = new SessionState()
     state.add(createSessionTab(1, 'One', 'https://one.example'))
     state.add(createSessionTab(2, 'Two', 'https://two.example'))
@@ -39,7 +39,7 @@ describe('SessionState', () => {
 
     expect(state.toggleFocus(1)).toBe(true)
     expect(state.gainOffsetDb(1)).toBe(0)
-    expect(state.gainOffsetDb(2)).toBe(-12)
+    expect(state.gainOffsetDb(2, -24)).toBe(-24)
     expect(state.get(2)?.gainDb).toBe(-8)
     expect(state.snapshot()).toMatchObject({ focusTabId: 1, soloTabId: null })
 

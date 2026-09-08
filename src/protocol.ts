@@ -6,6 +6,8 @@ export const MIN_GAIN_DB = -60
 export const DEFAULT_MAX_GAIN_DB = 0
 export const GAIN_CHANGE_EPSILON_DB = 0.1
 export const FOCUS_ATTENUATION_DB = -12
+export const MIN_FOCUS_ATTENUATION_DB = -60
+export const MAX_FOCUS_ATTENUATION_DB = 0
 
 export interface TabLufs {
   momentary: number
@@ -32,6 +34,7 @@ export interface AutoBalanceSettings {
 
 export interface AutoFocusSettings {
   enabled: boolean
+  attenuationDb: number
 }
 
 export interface LimiterSettings {
@@ -67,6 +70,7 @@ export const DEFAULT_AUTO_BALANCE_SETTINGS: Readonly<AutoBalanceSettings> = {
 
 export const DEFAULT_AUTO_FOCUS_SETTINGS: Readonly<AutoFocusSettings> = {
   enabled: false,
+  attenuationDb: FOCUS_ATTENUATION_DB,
 }
 
 export const DEFAULT_LIMITER_SETTINGS: Readonly<LimiterSettings> = {
@@ -109,7 +113,11 @@ export type BackgroundRequest =
   | { type: 'CLEAR_SOLO' }
   | { type: 'TOGGLE_FOCUS'; tabId: number }
   | { type: 'CLEAR_FOCUS' }
-  | { type: 'SET_AUTO_FOCUS_ENABLED'; enabled: boolean }
+  | {
+      type: 'SET_AUTO_FOCUS_SETTINGS'
+      settings: Partial<AutoFocusSettings>
+      persist?: boolean
+    }
   | { type: 'SET_TARGET_LUFS'; targetLufs: number; persist?: boolean }
   | { type: 'SET_LIMITER_SETTINGS'; settings: Partial<LimiterSettings>; persist?: boolean }
   | { type: 'RESET_LUFS_REQUEST'; tabId: number }

@@ -21,8 +21,8 @@ Loudness DD is a Chrome MV3 extension that:
 - Captures audio from selected tabs, measures loudness in LUFS (BS.1770-5), and balances levels toward a target LUFS.
 - Provides a limiter to prevent clipping.
 - Lets users register tabs with automatic balancing, set target LUFS, manage per-tab gain, and use
-  Solo or Focus modes. Focus lowers non-focused captures by 12 dB; auto-focus follows the active
-  monitored tab.
+  Solo or Focus modes. Focus lowers non-focused captures by a configurable amount; auto-focus
+  follows the active monitored tab.
 
 ## Key architecture
 
@@ -60,7 +60,7 @@ Background request/response messages (async responses):
 - `CLEAR_SOLO` → { success, state }
 - `TOGGLE_FOCUS` { tabId } → { success, state }
 - `CLEAR_FOCUS` → { success, state }
-- `SET_AUTO_FOCUS_ENABLED` { enabled } → { success, state }
+- `SET_AUTO_FOCUS_SETTINGS` { settings, persist? } → { success, state? }
 - `RESET_LUFS_REQUEST` { tabId } → { success }
 
 Every successful mutation may return the complete extension state so the popup can update
