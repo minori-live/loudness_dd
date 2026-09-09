@@ -40,9 +40,8 @@ export interface AutoFocusSettings {
 export interface LimiterSettings {
   enabled: boolean
   thresholdDb: number
-  kneeDb: number
-  ratio: number
-  attackMs: number
+  targetDb: number
+  kneePercent: number
   releaseMs: number
 }
 
@@ -75,10 +74,9 @@ export const DEFAULT_AUTO_FOCUS_SETTINGS: Readonly<AutoFocusSettings> = {
 
 export const DEFAULT_LIMITER_SETTINGS: Readonly<LimiterSettings> = {
   enabled: false,
-  thresholdDb: -1,
-  kneeDb: 0,
-  ratio: 20,
-  attackMs: 1,
+  thresholdDb: -3,
+  targetDb: -1,
+  kneePercent: 50,
   releaseMs: 100,
 }
 

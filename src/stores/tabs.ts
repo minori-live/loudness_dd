@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, shallowRef } from 'vue'
 
+import { normalizeLimiterSettings } from '@/audio/limiter-settings'
 import {
   DEFAULT_AUTO_BALANCE_SETTINGS,
   DEFAULT_AUTO_FOCUS_SETTINGS,
@@ -125,10 +126,9 @@ export const useTabsStore = defineStore('tabs', () => {
   })
   const isLimiterEnabled = computed(() => limiterSettings.value.enabled)
   const limiterThreshold = computed(() => limiterSettings.value.thresholdDb)
-  const limiterAttack = computed(() => limiterSettings.value.attackMs)
+  const limiterTarget = computed(() => limiterSettings.value.targetDb)
   const limiterRelease = computed(() => limiterSettings.value.releaseMs)
-  const limiterKnee = computed(() => limiterSettings.value.kneeDb)
-  const limiterRatio = computed(() => limiterSettings.value.ratio)
+  const limiterKnee = computed(() => limiterSettings.value.kneePercent)
   const hasSolo = computed(() => soloTabId.value !== null)
   const hasFocus = computed(() => focusTabId.value !== null)
   const isAutoFocusEnabled = computed(() => autoFocusSettings.value.enabled)
@@ -426,7 +426,7 @@ export const useTabsStore = defineStore('tabs', () => {
   }
 
   function previewLimiter(next: Partial<LimiterSettings>): void {
-    limiterSettings.value = { ...limiterSettings.value, ...next }
+    limiterSettings.value = normalizeLimiterSettings({ ...limiterSettings.value, ...next })
     scheduleCommand(
       'limiter',
       { type: 'SET_LIMITER_SETTINGS', settings: limiterSettings.value, persist: false },
@@ -436,8 +436,11 @@ export const useTabsStore = defineStore('tabs', () => {
 
   function updateLimiter(settings: Partial<LimiterSettings>): Promise<boolean> {
     cancelScheduledCommand('limiter')
-    limiterSettings.value = { ...limiterSettings.value, ...settings }
-    return sendCommand({ type: 'SET_LIMITER_SETTINGS', settings }, 'Failed to update limiter')
+    limiterSettings.value = normalizeLimiterSettings({ ...limiterSettings.value, ...settings })
+    return sendCommand(
+      { type: 'SET_LIMITER_SETTINGS', settings: limiterSettings.value },
+      'Failed to update limiter',
+    )
   }
 
   function setLimiterEnabled(enabled: boolean): Promise<boolean> {
@@ -448,20 +451,16 @@ export const useTabsStore = defineStore('tabs', () => {
     return updateLimiter({ thresholdDb })
   }
 
-  function setLimiterAttack(attackMs: number): Promise<boolean> {
-    return updateLimiter({ attackMs })
+  function setLimiterTarget(targetDb: number): Promise<boolean> {
+    return updateLimiter({ targetDb })
   }
 
   function setLimiterRelease(releaseMs: number): Promise<boolean> {
     return updateLimiter({ releaseMs })
   }
 
-  function setLimiterKnee(kneeDb: number): Promise<boolean> {
-    return updateLimiter({ kneeDb })
-  }
-
-  function setLimiterRatio(ratio: number): Promise<boolean> {
-    return updateLimiter({ ratio })
+  function setLimiterKnee(kneePercent: number): Promise<boolean> {
+    return updateLimiter({ kneePercent })
   }
 
   function resetLufs(tabId: number): Promise<boolean> {
@@ -503,10 +502,9 @@ export const useTabsStore = defineStore('tabs', () => {
     averageLufs,
     isLimiterEnabled,
     limiterThreshold,
-    limiterAttack,
+    limiterTarget,
     limiterRelease,
     limiterKnee,
-    limiterRatio,
     hasSolo,
     hasFocus,
     isAutoFocusEnabled,
@@ -529,10 +527,9 @@ export const useTabsStore = defineStore('tabs', () => {
     previewLimiter,
     setLimiterEnabled,
     setLimiterThreshold,
-    setLimiterAttack,
+    setLimiterTarget,
     setLimiterRelease,
     setLimiterKnee,
-    setLimiterRatio,
     resetLufs,
     startSync,
     stopSync,

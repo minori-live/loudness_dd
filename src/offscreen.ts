@@ -19,6 +19,7 @@ import {
   type TabLufs,
 } from '@/protocol'
 import lufsWasmUrl from '@/wasm/lufs_meter.wasm?url'
+import limiterProcessorUrl from '@/worklets/limiter-processor?worker&url'
 import lufsProcessorUrl from '@/worklets/lufs-processor?worker&url'
 
 interface TabAudioProcessor extends SessionTabState {
@@ -33,8 +34,7 @@ interface TabAudioProcessor extends SessionTabState {
 interface AudioEngine {
   context: AudioContext
   mixNode: GainNode
-  limiterNode: DynamicsCompressorNode
-  limiterEnabled: boolean | null
+  limiterNode: AudioWorkletNode
   wasmModule: WebAssembly.Module
   contextStateHandler: () => void
 }
@@ -77,11 +77,15 @@ async function createAudioEngine(): Promise<AudioEngine> {
     const [wasmModule] = await Promise.all([
       loadLufsWasmModule(),
       context.audioWorklet.addModule(lufsProcessorUrl),
+      context.audioWorklet.addModule(limiterProcessorUrl),
     ])
     await context.resume()
     const contextStateHandler = () => {
       if (context.state !== 'closed') return
-      if (audioEngine?.context === context) audioEngine = undefined
+      if (audioEngine?.context === context) {
+        audioEngine.limiterNode.port.close()
+        audioEngine = undefined
+      }
       for (const processor of Array.from(session.values())) {
         void endCapture(processor.tabId, 'Audio context closed')
       }
@@ -90,12 +94,20 @@ async function createAudioEngine(): Promise<AudioEngine> {
     const engine: AudioEngine = {
       context,
       mixNode: context.createGain(),
-      limiterNode: context.createDynamicsCompressor(),
-      limiterEnabled: null,
+      limiterNode: new AudioWorkletNode(context, 'peak-limiter', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        channelCount: 2,
+        channelCountMode: 'explicit',
+        processorOptions: { settings: settings.limiter },
+      }),
       wasmModule,
       contextStateHandler,
     }
-    configureLimiter(engine, settings.limiter)
+    // Keep the delay line running during bypass, so toggling never replays stale audio.
+    engine.mixNode.connect(engine.limiterNode)
+    engine.limiterNode.connect(context.destination)
     return engine
   } catch (error) {
     if (context.state !== 'closed') await context.close()
@@ -121,6 +133,7 @@ async function closeAudioEngineIfIdle(): Promise<void> {
   const engine = audioEngine
   audioEngine = undefined
   engine.context.removeEventListener('statechange', engine.contextStateHandler)
+  engine.limiterNode.port.close()
   try {
     if (engine.context.state !== 'closed') await engine.context.close()
   } catch {
@@ -171,34 +184,8 @@ function notifyCaptureEnded(tabId: number, reason: string): void {
   void chrome.runtime.sendMessage(message).catch(() => undefined)
 }
 
-function applyLimiterSettings(node: DynamicsCompressorNode, limiter: LimiterSettings): void {
-  if (!limiter.enabled) return
-  const time = node.context.currentTime
-  node.threshold.setValueAtTime(limiter.thresholdDb, time)
-  node.knee.setValueAtTime(limiter.kneeDb, time)
-  node.ratio.setValueAtTime(limiter.ratio, time)
-  node.attack.setValueAtTime(limiter.attackMs / 1000, time)
-  node.release.setValueAtTime(limiter.releaseMs / 1000, time)
-}
-
 function configureLimiter(engine: AudioEngine, limiter: LimiterSettings): void {
-  if (engine.limiterEnabled === limiter.enabled) {
-    applyLimiterSettings(engine.limiterNode, limiter)
-    return
-  }
-
-  if (engine.limiterEnabled !== null) {
-    engine.mixNode.disconnect()
-    engine.limiterNode.disconnect()
-  }
-  if (limiter.enabled) {
-    applyLimiterSettings(engine.limiterNode, limiter)
-    engine.mixNode.connect(engine.limiterNode)
-    engine.limiterNode.connect(engine.context.destination)
-  } else {
-    engine.mixNode.connect(engine.context.destination)
-  }
-  engine.limiterEnabled = limiter.enabled
+  engine.limiterNode.port.postMessage({ type: 'settings', settings: limiter })
 }
 
 function applyEffectiveGain(processor: TabAudioProcessor, smooth = false): void {

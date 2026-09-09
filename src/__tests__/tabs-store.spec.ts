@@ -27,10 +27,9 @@ function extensionState(integrated: number, tabIds = [1]): ExtensionState {
     autoFocusSettings: { enabled: false, attenuationDb: -12 },
     limiterSettings: {
       enabled: false,
-      thresholdDb: -1,
-      kneeDb: 0,
-      ratio: 20,
-      attackMs: 1,
+      thresholdDb: -3,
+      targetDb: -1,
+      kneePercent: 50,
       releaseMs: 100,
     },
   }

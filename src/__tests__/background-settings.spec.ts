@@ -4,10 +4,10 @@ import { normalizeSettings } from '@/background/settings'
 
 describe('normalizeSettings', () => {
   it('merges stored partial settings with defaults', () => {
-    expect(normalizeSettings(undefined, { ratio: 8 })).toMatchObject({
+    expect(normalizeSettings(undefined, { releaseMs: 200 })).toMatchObject({
       autoBalance: { targetLufs: -14 },
       autoFocus: { enabled: false, attenuationDb: -12 },
-      limiter: { enabled: false, thresholdDb: -1, ratio: 8 },
+      limiter: { enabled: false, thresholdDb: -3, targetDb: -1, kneePercent: 50, releaseMs: 200 },
     })
   })
 
@@ -20,16 +20,16 @@ describe('normalizeSettings', () => {
   it('clamps invalid persisted values at the boundary', () => {
     const settings = normalizeSettings(
       { targetLufs: 20 },
-      { enabled: true, thresholdDb: -200, kneeDb: 80, ratio: 0, attackMs: -1 },
+      { enabled: true, thresholdDb: -200, targetDb: 10, kneePercent: 200, releaseMs: -1 },
     )
 
     expect(settings.autoBalance.targetLufs).toBe(0)
     expect(settings.limiter).toMatchObject({
       enabled: true,
-      thresholdDb: -100,
-      kneeDb: 40,
-      ratio: 1,
-      attackMs: 0,
+      thresholdDb: -60,
+      targetDb: -0.1,
+      kneePercent: 100,
+      releaseMs: 10,
     })
     expect(
       normalizeSettings(undefined, undefined, { attenuationDb: -200 }).autoFocus,

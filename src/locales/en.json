@@ -32,31 +32,18 @@
     },
     "on": "ON",
     "off": "OFF",
-    "description": "Prevents clipping across tabs. Threshold sets the level where limiting begins.",
-    "ceiling": "Threshold",
-    "advanced": "Advanced Settings",
-    "ratio": "Ratio",
-    "attack": "Attack",
+    "description": "Limits the mixed output without boosting quiet audio.",
+    "threshold": "Threshold",
+    "target": "Target",
     "release": "Release",
-    "knee": "Knee",
+    "knee": "Knee softness",
     "hints": {
-      "attack": {
-        "fast": "Fast - catches transients",
-        "balanced": "Balanced",
-        "slow": "Slow - more natural"
-      },
-      "release": {
-        "fast": "Fast - punchy",
-        "balanced": "Balanced",
-        "slow": "Slow - smooth"
-      },
-      "knee": {
-        "hard": "Hard knee - precise limiting",
-        "soft": "Soft knee - smoother",
-        "verySoft": "Very soft - gentle compression"
-      }
+      "threshold": "Soft limiting begins above this input level.",
+      "target": "Output sample-peak ceiling. Lowering it also lowers threshold if needed.",
+      "release": "Longer release restores volume more gradually.",
+      "knee": "0%: hard ceiling at target. Higher values bend more gently from threshold."
     },
-    "active": "Limiter active on all monitored tabs"
+    "active": "Limiter active on the mixed output"
   },
   "tabs": {
     "empty": {

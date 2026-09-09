@@ -1,7 +1,7 @@
+import { normalizeLimiterSettings } from '@/audio/limiter-settings'
 import {
   DEFAULT_AUTO_BALANCE_SETTINGS,
   DEFAULT_AUTO_FOCUS_SETTINGS,
-  DEFAULT_LIMITER_SETTINGS,
   MAX_FOCUS_ATTENUATION_DB,
   MIN_FOCUS_ATTENUATION_DB,
   type LimiterSettings,
@@ -41,40 +41,7 @@ export function normalizeSettings(
         DEFAULT_AUTO_FOCUS_SETTINGS.attenuationDb,
       ),
     },
-    limiter: {
-      enabled:
-        typeof limiter?.enabled === 'boolean' ? limiter.enabled : DEFAULT_LIMITER_SETTINGS.enabled,
-      thresholdDb: clamp(
-        limiter?.thresholdDb ?? DEFAULT_LIMITER_SETTINGS.thresholdDb,
-        -100,
-        0,
-        DEFAULT_LIMITER_SETTINGS.thresholdDb,
-      ),
-      kneeDb: clamp(
-        limiter?.kneeDb ?? DEFAULT_LIMITER_SETTINGS.kneeDb,
-        0,
-        40,
-        DEFAULT_LIMITER_SETTINGS.kneeDb,
-      ),
-      ratio: clamp(
-        limiter?.ratio ?? DEFAULT_LIMITER_SETTINGS.ratio,
-        1,
-        60,
-        DEFAULT_LIMITER_SETTINGS.ratio,
-      ),
-      attackMs: clamp(
-        limiter?.attackMs ?? DEFAULT_LIMITER_SETTINGS.attackMs,
-        0,
-        1000,
-        DEFAULT_LIMITER_SETTINGS.attackMs,
-      ),
-      releaseMs: clamp(
-        limiter?.releaseMs ?? DEFAULT_LIMITER_SETTINGS.releaseMs,
-        0,
-        5000,
-        DEFAULT_LIMITER_SETTINGS.releaseMs,
-      ),
-    },
+    limiter: normalizeLimiterSettings(limiter),
   }
 }
 

@@ -4,6 +4,7 @@ import { createDefaultSettings, type OffscreenRequest, type OffscreenResponse } 
 
 vi.mock('@/wasm/lufs_meter.wasm?url', () => ({ default: 'meter.wasm' }))
 vi.mock('@/worklets/lufs-processor?worker&url', () => ({ default: 'processor.js' }))
+vi.mock('@/worklets/limiter-processor?worker&url', () => ({ default: 'limiter.js' }))
 
 class MockNode {
   outputs = new Set<MockNode>()
@@ -27,24 +28,13 @@ class MockGain extends MockNode {
   }
 }
 
-class MockCompressor extends MockNode {
-  threshold = parameter()
-  knee = parameter()
-  ratio = parameter()
-  attack = parameter()
-  release = parameter()
-  constructor(readonly context: MockContext) {
-    super()
-  }
-}
-
 class MockContext {
   static instances: MockContext[] = []
   destination = new MockNode()
   currentTime = 0
   state = 'running'
   gains: MockGain[] = []
-  compressors: MockCompressor[] = []
+  limiters: MockWorklet[] = []
   sources: MockNode[] = []
   audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) }
   resume = vi.fn().mockResolvedValue(undefined)
@@ -61,11 +51,6 @@ class MockContext {
     this.gains.push(node)
     return node
   }
-  createDynamicsCompressor() {
-    const node = new MockCompressor(this)
-    this.compressors.push(node)
-    return node
-  }
   createMediaStreamSource() {
     const node = new MockNode()
     this.sources.push(node)
@@ -75,6 +60,14 @@ class MockContext {
 
 class MockWorklet extends MockNode {
   port = { onmessage: null, close: vi.fn(), postMessage: vi.fn() }
+  constructor(
+    context: MockContext,
+    name: string,
+    readonly options: AudioWorkletNodeOptions,
+  ) {
+    super()
+    if (name === 'peak-limiter') context.limiters.push(this)
+  }
 }
 
 describe('offscreen mixed output limiter', () => {
@@ -141,8 +134,9 @@ describe('offscreen mixed output limiter', () => {
     expect(MockContext.instances).toHaveLength(1)
     const context = MockContext.instances[0]!
     const [mix, first, second] = context.gains
-    const [limiter] = context.compressors
-    expect(context.compressors).toHaveLength(1)
+    const [limiter] = context.limiters
+    expect(context.limiters).toHaveLength(1)
+    expect(limiter!.options.processorOptions.settings).toEqual(settings.limiter)
     expect(first!.outputs).toEqual(new Set([mix]))
     expect(second!.outputs).toEqual(new Set([mix]))
     expect(mix!.outputs).toEqual(new Set([limiter]))
@@ -156,47 +150,53 @@ describe('offscreen mixed output limiter', () => {
 
     await dispatch({ type: 'STOP_CAPTURE', target: 'offscreen', tabId: 2 })
     expect(context.close).toHaveBeenCalledOnce()
+    expect(limiter!.port.close).toHaveBeenCalledOnce()
     const next = await start(3)
     expect(next).not.toBe(context)
-    expect(next.gains[0]!.outputs).toEqual(new Set([next.compressors[0]]))
+    expect(next.gains[0]!.outputs).toEqual(new Set([next.limiters[0]]))
   })
 
   it('switches the shared bypass and updates parameters without reconnecting tab inputs', async () => {
     const context = await start(1)
     await start(2)
     const [mix, first, second] = context.gains
-    const limiter = context.compressors[0]!
-    expect(mix!.outputs).toEqual(new Set([context.destination]))
+    const limiter = context.limiters[0]!
+    expect(mix!.outputs).toEqual(new Set([limiter]))
     const settings = createDefaultSettings()
     settings.limiter = {
       enabled: true,
       thresholdDb: -3,
-      kneeDb: 2,
-      ratio: 15,
-      attackMs: 5,
+      targetDb: -1,
+      kneePercent: 75,
       releaseMs: 200,
     }
     await dispatch({ type: 'SYNC_SETTINGS', target: 'offscreen', settings })
     expect(mix!.outputs).toEqual(new Set([limiter]))
     expect(limiter.outputs).toEqual(new Set([context.destination]))
-    expect(limiter.threshold.setValueAtTime).toHaveBeenLastCalledWith(-3, 0)
-    expect(limiter.knee.setValueAtTime).toHaveBeenLastCalledWith(2, 0)
-    expect(limiter.ratio.setValueAtTime).toHaveBeenLastCalledWith(15, 0)
-    expect(limiter.attack.setValueAtTime).toHaveBeenLastCalledWith(0.005, 0)
-    expect(limiter.release.setValueAtTime).toHaveBeenLastCalledWith(0.2, 0)
+    expect(limiter.port.postMessage).toHaveBeenLastCalledWith({
+      type: 'settings',
+      settings: settings.limiter,
+    })
     settings.limiter.thresholdDb = -6
     await dispatch({ type: 'SYNC_SETTINGS', target: 'offscreen', settings })
-    expect(limiter.threshold.setValueAtTime).toHaveBeenLastCalledWith(-6, 0)
+    expect(limiter.port.postMessage).toHaveBeenLastCalledWith({
+      type: 'settings',
+      settings: settings.limiter,
+    })
     settings.limiter.enabled = false
     await dispatch({ type: 'SYNC_SETTINGS', target: 'offscreen', settings })
-    expect(mix!.outputs).toEqual(new Set([context.destination]))
-    expect(limiter.outputs.size).toBe(0)
+    expect(limiter.port.postMessage).toHaveBeenLastCalledWith({
+      type: 'settings',
+      settings: settings.limiter,
+    })
+    expect(mix!.outputs).toEqual(new Set([limiter]))
+    expect(limiter.outputs).toEqual(new Set([context.destination]))
     settings.limiter.enabled = true
     await dispatch({ type: 'SYNC_SETTINGS', target: 'offscreen', settings })
     expect(mix!.outputs).toEqual(new Set([limiter]))
     expect(limiter.outputs).toEqual(new Set([context.destination]))
     expect(first!.outputs).toEqual(new Set([mix]))
     expect(second!.outputs).toEqual(new Set([mix]))
-    expect(context.compressors).toHaveLength(1)
+    expect(context.limiters).toHaveLength(1)
   })
 })

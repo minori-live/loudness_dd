@@ -53,6 +53,7 @@ const emit = defineEmits<{
         :max="max"
         :step="step"
         :value="value"
+        :aria-label="label"
         :tone="tone"
         :disabled="disabled"
         @input="emit('input', $event)"

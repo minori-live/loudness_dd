@@ -19,7 +19,7 @@ The toolchain is locked in `mise.toml` and `mise.lock`: Node, pnpm, Rust with th
 Loudness DD is a Chrome MV3 extension that:
 
 - Captures audio from selected tabs, measures loudness in LUFS (BS.1770-5), and balances levels toward a target LUFS.
-- Provides a limiter to prevent clipping.
+- Provides a shared stereo-linked sample-peak limiter after mixing, with threshold, target, release, and knee softness controls and no makeup gain.
 - Lets users register tabs with automatic balancing, set target LUFS, manage per-tab gain, and use
   Solo or Focus modes. Focus lowers non-focused captures by a configurable amount; auto-focus
   follows the active monitored tab.
@@ -128,7 +128,7 @@ CI and release:
 3. Manifest changes:
    - Do not add new permissions without documented rationale. Review Chrome’s MV3 constraints.
 4. Audio changes:
-   - Validate CPU/perf, clamp user-facing ranges (gain, thresholds, ratios).
+   - Validate CPU/perf, clamp user-facing ranges (gain, threshold, target, release, knee softness).
    - Keep limiter defaults conservative (avoid audible pumping).
    - Run `pnpm wasm:build` after Rust changes; generated WASM is intentionally not committed.
 5. Lifecycle:
@@ -154,7 +154,7 @@ CI and release:
 - Adjust limiter defaults:
   1. Update `DEFAULT_LIMITER_SETTINGS` in [src/protocol.ts](src/protocol.ts).
   2. Ensure `GET_STATE` and `SYNC_SETTINGS` return/apply the same values.
-  3. Add coverage for edge values (e.g., extreme ratios, fast attack).
+  3. Add coverage for edge values (e.g., coincident threshold/target, hard knee, short release, and sudden peaks).
 
 ## Tests
 
@@ -179,7 +179,7 @@ Suggested gates before merging:
   - Look for the `CAPTURE_ENDED` reason; tabs navigating/closing stop tracks. Ensure cleanup runs
     without exceptions.
 - Audio graph silent:
-  - Offscreen connects each `source → gain → shared mix → shared limiter → destination` and also `source → worklet → destination` (silent output). With the limiter disabled, the shared mix connects directly to the destination. Verify node connections and context state.
+  - Offscreen connects each `source → gain → shared mix → shared limiter worklet → destination` and also `source → LUFS worklet → destination` (silent output). The limiter keeps its 5 ms delay line running during bypass to avoid replaying stale samples on re-enable. Verify node connections and context state.
 
 ## Definition of Done (agent)
 

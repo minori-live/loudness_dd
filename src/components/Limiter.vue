@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useTabsStore } from '@/stores/tabs'
 
-import LimiterAdvanced from './limiter/LimiterAdvanced.vue'
 import LimiterParameter from './limiter/LimiterParameter.vue'
-import UiButton from './ui/UiButton.vue'
 import UiCard from './ui/UiCard.vue'
 import UiSwitch from './ui/UiSwitch.vue'
 
@@ -14,14 +12,12 @@ defineOptions({ name: 'LimiterControl' })
 
 const tabsStore = useTabsStore()
 const { t } = useI18n()
-const showAdvanced = shallowRef(false)
 
 const isEnabled = computed(() => tabsStore.isLimiterEnabled)
 const threshold = computed(() => tabsStore.limiterThreshold)
-const attack = computed(() => tabsStore.limiterAttack)
+const target = computed(() => tabsStore.limiterTarget)
 const release = computed(() => tabsStore.limiterRelease)
 const knee = computed(() => tabsStore.limiterKnee)
-const ratio = computed(() => tabsStore.limiterRatio)
 </script>
 
 <template>
@@ -47,46 +43,58 @@ const ratio = computed(() => tabsStore.limiterRatio)
       :class="!isEnabled && 'pointer-events-none opacity-45'"
     >
       <LimiterParameter
-        :label="t('limiter.ceiling')"
+        :label="t('limiter.threshold')"
         :display-value="`${threshold.toFixed(1)} dB`"
         :value="threshold"
-        :min="-6"
-        :max="-0.1"
+        :min="-60"
+        :max="target"
         :step="0.1"
         :disabled="!isEnabled"
         tone="focus"
+        :hint="t('limiter.hints.threshold')"
         @input="tabsStore.previewLimiter({ thresholdDb: $event })"
         @change="tabsStore.setLimiterThreshold($event)"
       />
 
-      <UiButton
-        variant="disclosure"
+      <LimiterParameter
+        :label="t('limiter.target')"
+        :display-value="`${target.toFixed(1)} dB`"
+        :value="target"
+        :min="-60"
+        :max="-0.1"
+        :step="0.1"
         :disabled="!isEnabled"
-        :aria-expanded="showAdvanced"
-        @click="showAdvanced = !showAdvanced"
-      >
-        <span aria-hidden="true">{{ showAdvanced ? '▼' : '▶' }}</span>
-        <span>{{ t('limiter.advanced') }}</span>
-      </UiButton>
-
-      <Transition name="limiter-slide">
-        <LimiterAdvanced
-          v-if="showAdvanced"
-          :enabled="isEnabled"
-          :ratio="ratio"
-          :attack="attack"
-          :release="release"
-          :knee="knee"
-          @ratio-preview="tabsStore.previewLimiter({ ratio: $event })"
-          @ratio="tabsStore.setLimiterRatio($event)"
-          @attack-preview="tabsStore.previewLimiter({ attackMs: $event })"
-          @attack="tabsStore.setLimiterAttack($event)"
-          @release-preview="tabsStore.previewLimiter({ releaseMs: $event })"
-          @release="tabsStore.setLimiterRelease($event)"
-          @knee-preview="tabsStore.previewLimiter({ kneeDb: $event })"
-          @knee="tabsStore.setLimiterKnee($event)"
-        />
-      </Transition>
+        tone="target"
+        :hint="t('limiter.hints.target')"
+        @input="tabsStore.previewLimiter({ targetDb: $event })"
+        @change="tabsStore.setLimiterTarget($event)"
+      />
+      <LimiterParameter
+        :label="t('limiter.release')"
+        :display-value="`${release.toFixed(0)} ms`"
+        :value="release"
+        :min="10"
+        :max="500"
+        :step="5"
+        :disabled="!isEnabled"
+        tone="warning"
+        :hint="t('limiter.hints.release')"
+        @input="tabsStore.previewLimiter({ releaseMs: $event })"
+        @change="tabsStore.setLimiterRelease($event)"
+      />
+      <LimiterParameter
+        :label="t('limiter.knee')"
+        :display-value="`${knee.toFixed(0)}%`"
+        :value="knee"
+        :min="0"
+        :max="100"
+        :step="5"
+        :disabled="!isEnabled"
+        tone="teal"
+        :hint="t('limiter.hints.knee')"
+        @input="tabsStore.previewLimiter({ kneePercent: $event })"
+        @change="tabsStore.setLimiterKnee($event)"
+      />
     </div>
 
     <div v-if="isEnabled" class="mt-3 flex items-center gap-1.5 text-[9px] text-success">
@@ -95,18 +103,3 @@ const ratio = computed(() => tabsStore.limiterRatio)
     </div>
   </UiCard>
 </template>
-
-<style scoped>
-.limiter-slide-enter-active,
-.limiter-slide-leave-active {
-  transition:
-    opacity 180ms ease,
-    transform 180ms ease;
-}
-
-.limiter-slide-enter-from,
-.limiter-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-</style>

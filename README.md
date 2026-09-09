@@ -36,9 +36,11 @@
 ### Output Limiter
 
 - Prevents clipping when multiple loud sources play simultaneously
-- Configurable ceiling threshold (-6 dB to -0.1 dB)
-- Advanced controls: Attack, Release, and Knee parameters
-- Protects your ears and speakers from unexpected volume spikes
+- A shared stereo-linked peak limiter processes the mixed output
+- Threshold: soft limiting starts at -3 dB by default; Target: output sample peaks stay at or below -1 dB
+- Release: 100 ms by default; Knee softness: 50% (0% is a hard ceiling, 100% is the gentlest bend)
+- No makeup gain; a fixed 5 ms lookahead catches transients, with the same delay during bypass
+- Target is a sample-peak ceiling, not an oversampled true-peak guarantee
 
 ### Tab Management
 
