@@ -179,7 +179,7 @@ Suggested gates before merging:
   - Look for the `CAPTURE_ENDED` reason; tabs navigating/closing stop tracks. Ensure cleanup runs
     without exceptions.
 - Audio graph silent:
-  - Offscreen connects `source → gain → limiter → destination` and also `source → worklet → destination` (silent output). Verify node connections and context state.
+  - Offscreen connects each `source → gain → shared mix → shared limiter → destination` and also `source → worklet → destination` (silent output). With the limiter disabled, the shared mix connects directly to the destination. Verify node connections and context state.
 
 ## Definition of Done (agent)
 

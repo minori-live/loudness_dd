@@ -24,8 +24,6 @@ import lufsProcessorUrl from '@/worklets/lufs-processor?worker&url'
 interface TabAudioProcessor extends SessionTabState {
   sourceNode: MediaStreamAudioSourceNode
   gainNode: GainNode
-  limiterNode: DynamicsCompressorNode
-  limiterEnabled: boolean | null
   workletNode: AudioWorkletNode
   stream: MediaStream
   trackEndedHandler: () => void
@@ -34,6 +32,9 @@ interface TabAudioProcessor extends SessionTabState {
 
 interface AudioEngine {
   context: AudioContext
+  mixNode: GainNode
+  limiterNode: DynamicsCompressorNode
+  limiterEnabled: boolean | null
   wasmModule: WebAssembly.Module
   contextStateHandler: () => void
 }
@@ -47,7 +48,7 @@ const AUTO_GAIN_UPDATE_INTERVAL_SECONDS = 0.2
 const AUTO_GAIN_TIME_CONSTANT_SECONDS = 0.05
 let settings = createDefaultSettings()
 let lufsWasmModulePromise: Promise<WebAssembly.Module> | undefined
-let meterNotificationTimer: number | undefined
+let meterNotificationTimer: ReturnType<typeof setTimeout> | undefined
 let audioEngine: AudioEngine | undefined
 let audioEnginePromise: Promise<AudioEngine> | undefined
 let pendingCaptureStarts = 0
@@ -86,7 +87,16 @@ async function createAudioEngine(): Promise<AudioEngine> {
       }
     }
     context.addEventListener('statechange', contextStateHandler)
-    return { context, wasmModule, contextStateHandler }
+    const engine: AudioEngine = {
+      context,
+      mixNode: context.createGain(),
+      limiterNode: context.createDynamicsCompressor(),
+      limiterEnabled: null,
+      wasmModule,
+      contextStateHandler,
+    }
+    configureLimiter(engine, settings.limiter)
+    return engine
   } catch (error) {
     if (context.state !== 'closed') await context.close()
     throw error
@@ -171,24 +181,24 @@ function applyLimiterSettings(node: DynamicsCompressorNode, limiter: LimiterSett
   node.release.setValueAtTime(limiter.releaseMs / 1000, time)
 }
 
-function configureLimiter(processor: TabAudioProcessor, limiter: LimiterSettings): void {
-  if (processor.limiterEnabled === limiter.enabled) {
-    applyLimiterSettings(processor.limiterNode, limiter)
+function configureLimiter(engine: AudioEngine, limiter: LimiterSettings): void {
+  if (engine.limiterEnabled === limiter.enabled) {
+    applyLimiterSettings(engine.limiterNode, limiter)
     return
   }
 
-  if (processor.limiterEnabled !== null) {
-    processor.gainNode.disconnect()
-    processor.limiterNode.disconnect()
+  if (engine.limiterEnabled !== null) {
+    engine.mixNode.disconnect()
+    engine.limiterNode.disconnect()
   }
   if (limiter.enabled) {
-    applyLimiterSettings(processor.limiterNode, limiter)
-    processor.gainNode.connect(processor.limiterNode)
-    processor.limiterNode.connect(processor.gainNode.context.destination)
+    applyLimiterSettings(engine.limiterNode, limiter)
+    engine.mixNode.connect(engine.limiterNode)
+    engine.limiterNode.connect(engine.context.destination)
   } else {
-    processor.gainNode.connect(processor.gainNode.context.destination)
+    engine.mixNode.connect(engine.context.destination)
   }
-  processor.limiterEnabled = limiter.enabled
+  engine.limiterEnabled = limiter.enabled
 }
 
 function applyEffectiveGain(processor: TabAudioProcessor, smooth = false): void {
@@ -221,10 +231,8 @@ function syncSettings(nextSettings: PersistedSettings): void {
     autoFocus: { ...nextSettings.autoFocus },
     limiter: { ...nextSettings.limiter },
   }
-  if (limiterChanged) {
-    for (const processor of session.values()) {
-      configureLimiter(processor, settings.limiter)
-    }
+  if (limiterChanged && audioEngine) {
+    configureLimiter(audioEngine, settings.limiter)
   }
   if (focusAttenuationChanged) applyAllGains(true)
 }
@@ -242,7 +250,6 @@ async function performCleanup(tabId: number): Promise<boolean> {
     processor.workletNode.disconnect()
     processor.sourceNode.disconnect()
     processor.gainNode.disconnect()
-    processor.limiterNode.disconnect()
   } catch {
     // Nodes may already be disconnected during browser teardown.
   }
@@ -307,7 +314,6 @@ async function startCapture(
   let stream: MediaStream | undefined
   let sourceNode: MediaStreamAudioSourceNode | undefined
   let gainNode: GainNode | undefined
-  let limiterNode: DynamicsCompressorNode | undefined
   let workletNode: AudioWorkletNode | undefined
 
   try {
@@ -331,7 +337,6 @@ async function startCapture(
     const audioContext = engine.context
     sourceNode = audioContext.createMediaStreamSource(stream)
     gainNode = audioContext.createGain()
-    limiterNode = audioContext.createDynamicsCompressor()
 
     sourceNode.connect(gainNode)
     workletNode = new AudioWorkletNode(audioContext, 'lufs-processor', {
@@ -357,15 +362,14 @@ async function startCapture(
       maxGainDb: 0,
       sourceNode,
       gainNode,
-      limiterNode,
-      limiterEnabled: null,
       workletNode,
       stream,
       trackEndedHandler,
       lastAutoGainUpdateTime: 0,
     }
 
-    configureLimiter(processor, settings.limiter)
+    // All audible tab signals are summed before the shared output limiter.
+    gainNode.connect(engine.mixNode)
     session.add(processor)
     workletNode.port.onmessage = (event: MessageEvent<Partial<TabLufs> & { type?: string }>) => {
       if (event.data?.type !== 'lufs') return
@@ -392,7 +396,6 @@ async function startCapture(
         workletNode?.disconnect()
         sourceNode?.disconnect()
         gainNode?.disconnect()
-        limiterNode?.disconnect()
       } catch {
         // Ignore partial graph cleanup failures.
       }
