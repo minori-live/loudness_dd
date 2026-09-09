@@ -35,6 +35,7 @@
     "description": "对混音后的总输出限幅，不放大较安静的内容。",
     "threshold": "介入阈值",
     "target": "输出上限",
+    "advanced": "高级设置",
     "release": "释放",
     "knee": "拐点柔和度",
     "hints": {

@@ -41,7 +41,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="space-y-1.5">
+  <div class="min-w-0 space-y-1.5">
     <label class="ui-control-label mb-0">
       <span>{{ label }}</span>
       <span class="ui-data font-600" :class="valueClass">{{ displayValue }}</span>

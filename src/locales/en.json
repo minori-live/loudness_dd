@@ -35,6 +35,7 @@
     "description": "Limits the mixed output without boosting quiet audio.",
     "threshold": "Threshold",
     "target": "Target",
+    "advanced": "Advanced Settings",
     "release": "Release",
     "knee": "Knee softness",
     "hints": {
