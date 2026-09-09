@@ -59,14 +59,36 @@ async function updateBadge(tabCount: number): Promise<void> {
   await chrome.action.setBadgeBackgroundColor({ color: '#48bb78' })
 }
 
-async function getState(): Promise<ExtensionState> {
+async function getState(refreshMetadata = false): Promise<ExtensionState> {
   const settings = await getSettings()
   const result = await sendToExistingOffscreen({
     type: 'SYNC_SETTINGS',
     target: OFFSCREEN_TARGET,
     settings,
   })
-  const session = result?.session ?? emptySession()
+  let session = result?.session ?? emptySession()
+  if (refreshMetadata && session.tabs.length > 0) {
+    try {
+      // Opening the popup grants activeTab again, including after cross-origin navigation.
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+      if (
+        tab?.id !== undefined &&
+        session.tabs.some((captured) => captured.tabId === tab.id) &&
+        (tab.title !== undefined || tab.favIconUrl !== undefined)
+      ) {
+        const updated = await sendToExistingOffscreen({
+          type: 'UPDATE_TAB_METADATA',
+          target: OFFSCREEN_TARGET,
+          tabId: tab.id,
+          title: tab.title,
+          favIconUrl: tab.favIconUrl,
+        })
+        if (updated) session = updated.session
+      }
+    } catch {
+      // A tab may close during refresh; keep the last known metadata.
+    }
+  }
   await updateBadge(session.tabs.length)
   return toExtensionState(session, settings)
 }
@@ -119,7 +141,7 @@ async function startTabCapture(tabId: number): Promise<CommandResponse> {
       tabId,
       streamId,
       title: tab.title || 'Unknown Tab',
-      url: tab.url || '',
+      favIconUrl: tab.favIconUrl || '',
     })
     const focusedSession = result.success ? await syncAutoFocus() : null
     const session = focusedSession ?? result.session
@@ -199,7 +221,7 @@ async function applySettingsPreview(
 async function handleRequest(message: BackgroundRequest): Promise<CommandResponse> {
   switch (message.type) {
     case 'GET_STATE':
-      return { success: true, state: await getState() }
+      return { success: true, state: await getState(true) }
     case 'START_CAPTURE_REQUEST':
       return startTabCapture(message.tabId)
     case 'STOP_CAPTURE_REQUEST':
@@ -330,14 +352,16 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 })
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (!changeInfo.title && !changeInfo.url) return
+  // Chrome supplies these fields only while activeTab access remains valid.
+  // The offscreen session ignores updates for tabs that are not registered.
+  if (changeInfo.title === undefined && changeInfo.favIconUrl === undefined) return
   void sendToExistingOffscreen({
     type: 'UPDATE_TAB_METADATA',
     target: OFFSCREEN_TARGET,
     tabId,
     title: changeInfo.title,
-    url: changeInfo.url,
-  })
+    favIconUrl: changeInfo.favIconUrl,
+  }).catch((error: unknown) => console.warn('Failed to update tab metadata:', error))
 })
 
 chrome.tabCapture.onStatusChanged.addListener((info) => {

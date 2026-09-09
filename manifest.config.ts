@@ -27,5 +27,5 @@ export default defineManifest({
   content_security_policy: {
     extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
   },
-  permissions: ['tabCapture', 'tabs', 'activeTab', 'offscreen', 'storage'],
+  permissions: ['tabCapture', 'activeTab', 'offscreen', 'storage'],
 })

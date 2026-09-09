@@ -8,7 +8,7 @@ function capturedTab(tabId: number, integrated: number): CapturedTab {
   return {
     tabId,
     title: `Example ${tabId}`,
-    url: `https://example.com/${tabId}`,
+    favIconUrl: `https://example.com/${tabId}`,
     isCapturing: true,
     currentLufs: { momentary: integrated, shortTerm: integrated, integrated, blockCount: 10 },
     gainDb: 0,

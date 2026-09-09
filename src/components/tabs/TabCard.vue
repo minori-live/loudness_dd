@@ -40,14 +40,6 @@ const cardClasses = computed(() => [
   props.ducked && !props.muted && 'opacity-65',
 ])
 
-const faviconUrl = computed(() => {
-  try {
-    return `https://www.google.com/s2/favicons?domain=${new URL(props.tab.url).hostname}&sz=32`
-  } catch {
-    return ''
-  }
-})
-
 function formatGain(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)} dB`
 }
@@ -64,8 +56,10 @@ function hideBrokenImage(event: Event): void {
       @click="collapsed = !collapsed"
     >
       <img
-        v-if="faviconUrl"
-        :src="faviconUrl"
+        v-if="tab.favIconUrl"
+        :key="tab.favIconUrl"
+        :src="tab.favIconUrl"
+        referrerpolicy="no-referrer"
         alt=""
         class="h-4 w-4 shrink-0 rounded-sm"
         @error="hideBrokenImage"

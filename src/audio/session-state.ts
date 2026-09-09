@@ -11,7 +11,7 @@ import {
 export interface SessionTabState {
   tabId: number
   title: string
-  url: string
+  favIconUrl: string
   currentLufs: TabLufs
   gainDb: number
   maxGainDb: number
@@ -65,11 +65,11 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
     return tab
   }
 
-  updateMetadata(tabId: number, metadata: { title?: string; url?: string }): boolean {
+  updateMetadata(tabId: number, metadata: { title?: string; favIconUrl?: string }): boolean {
     const tab = this.#tabs.get(tabId)
     if (!tab) return false
     if (metadata.title) tab.title = metadata.title
-    if (metadata.url) tab.url = metadata.url
+    if (metadata.favIconUrl !== undefined) tab.favIconUrl = metadata.favIconUrl
     return true
   }
 
@@ -159,7 +159,7 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
       tabs: Array.from(this.#tabs.values(), (tab) => ({
         tabId: tab.tabId,
         title: tab.title,
-        url: tab.url,
+        favIconUrl: tab.favIconUrl,
         isCapturing: true,
         currentLufs: { ...tab.currentLufs },
         gainDb: tab.gainDb,
@@ -173,11 +173,15 @@ export class SessionState<T extends SessionTabState = SessionTabState> {
   }
 }
 
-export function createSessionTab(tabId: number, title: string, url: string): SessionTabState {
+export function createSessionTab(
+  tabId: number,
+  title: string,
+  favIconUrl: string,
+): SessionTabState {
   return {
     tabId,
     title,
-    url,
+    favIconUrl,
     currentLufs: {
       momentary: -Infinity,
       shortTerm: -Infinity,

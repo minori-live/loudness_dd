@@ -120,7 +120,7 @@ describe('offscreen mixed output limiter', () => {
       tabId,
       streamId: String(tabId),
       title: 'Tab',
-      url: 'https://example.com',
+      favIconUrl: 'https://example.com',
     })
     expect(result.success).toBe(true)
     return MockContext.instances[MockContext.instances.length - 1]!

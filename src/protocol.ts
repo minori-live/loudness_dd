@@ -19,7 +19,7 @@ export interface TabLufs {
 export interface CapturedTab {
   tabId: number
   title: string
-  url: string
+  favIconUrl: string
   isCapturing: boolean
   currentLufs: TabLufs
   gainDb: number
@@ -127,7 +127,7 @@ export type OffscreenRequest =
       tabId: number
       streamId: string
       title: string
-      url: string
+      favIconUrl: string
     }
   | { type: 'STOP_CAPTURE'; target: typeof OFFSCREEN_TARGET; tabId: number }
   | { type: 'SET_GAIN'; target: typeof OFFSCREEN_TARGET; tabId: number; gainDb: number }
@@ -153,7 +153,7 @@ export type OffscreenRequest =
       target: typeof OFFSCREEN_TARGET
       tabId: number
       title?: string
-      url?: string
+      favIconUrl?: string
     }
 
 export interface CommandResponse {

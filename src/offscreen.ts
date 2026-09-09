@@ -293,7 +293,7 @@ async function startCapture(
   tabId: number,
   streamId: string,
   title: string,
-  url: string,
+  favIconUrl: string,
 ): Promise<OffscreenResponse> {
   if (session.get(tabId)) return response(false, 'Tab is already being captured')
 
@@ -338,7 +338,7 @@ async function startCapture(
     const processor: TabAudioProcessor = {
       tabId,
       title,
-      url,
+      favIconUrl,
       currentLufs: {
         momentary: -Infinity,
         shortTerm: -Infinity,
@@ -446,7 +446,7 @@ function setFocus(tabId: number | null): OffscreenResponse {
 function handleMessage(message: OffscreenRequest): OffscreenResponse | Promise<OffscreenResponse> {
   switch (message.type) {
     case 'START_CAPTURE':
-      return startCapture(message.tabId, message.streamId, message.title, message.url)
+      return startCapture(message.tabId, message.streamId, message.title, message.favIconUrl)
     case 'STOP_CAPTURE':
       return stopCapture(message.tabId)
     case 'SET_GAIN':
@@ -485,7 +485,12 @@ function handleMessage(message: OffscreenRequest): OffscreenResponse | Promise<O
       syncSettings(message.settings)
       return response(true)
     case 'UPDATE_TAB_METADATA':
-      if (session.updateMetadata(message.tabId, { title: message.title, url: message.url })) {
+      if (
+        session.updateMetadata(message.tabId, {
+          title: message.title,
+          favIconUrl: message.favIconUrl,
+        })
+      ) {
         notifySubscribers()
       }
       return response(true)
