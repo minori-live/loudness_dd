@@ -58,7 +58,7 @@ onUnmounted(() => tabsStore.stopSync())
       class="flex items-center justify-between border-b border-b-solid border-white/6 bg-black/20 px-4 py-3.5"
     >
       <div class="flex items-center gap-2.5">
-        <span class="text-2xl" aria-hidden="true">📊</span>
+        <img :src="'/logo@48w.png'" alt="" width="24" height="24" class="h-6 w-6 shrink-0" />
         <h1
           class="m-0 bg-gradient-to-br from-focus to-violet bg-clip-text text-lg font-700 text-transparent"
         >
