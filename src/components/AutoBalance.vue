@@ -27,12 +27,7 @@ async function handleTargetChange(value: number): Promise<void> {
   await tabsStore.setTargetLufs(value)
 }
 
-const presets = [
-  { key: 'broadcast', value: -24 },
-  { key: 'streaming', value: -14 },
-  { key: 'podcast', value: -16 },
-  { key: 'loud', value: -9 },
-]
+const presets = [-24, -14, -16, -9]
 
 async function applyPreset(value: number): Promise<void> {
   await tabsStore.setTargetLufs(value)
@@ -72,14 +67,13 @@ async function applyPreset(value: number): Promise<void> {
       <div class="flex flex-wrap gap-1.5">
         <UiButton
           v-for="preset in presets"
-          :key="preset.value"
+          :key="preset"
           variant="preset"
           tone="target"
-          :active="targetLufs === preset.value"
-          @click="applyPreset(preset.value)"
+          :active="targetLufs === preset"
+          @click="applyPreset(preset)"
         >
-          {{ t(`autobalance.presets.${preset.key}`) }}
-          <span class="ui-data text-[9px] opacity-70">{{ preset.value }}</span>
+          <span class="ui-data">{{ preset }}</span>
         </UiButton>
       </div>
     </div>
